@@ -1,6 +1,9 @@
 # Conocto BIM – Regeln für Agenten
 
 - Reiner Browser-Viewer für IFC. Kein Server, kein Upload, keine Analyse-Requests mit Modelldaten.
+- Zweck: Domänen verknüpfen (LV, Dokumente, Termine …) und Informationen am Modell visualisieren.
+  Verboten: Kollisionsprüfung, Merkmal-/Modellprüfung (Regelchecks, Prüfberichte). Stattdessen:
+  Informationen anzeigen, filtern, einfärben, verknüpfen.
 - Nie Modelldateien (`*.ifc`, `*.frag`) committen; Tests nur mit synthetischen Daten
   oder öffentlichen buildingSMART-Beispielen außerhalb des Repos.
 - 3D-Bibliothek nur über `src/viewer/engine.ts` (`BimEngine`) ansprechen; UI kennt That Open nicht.
