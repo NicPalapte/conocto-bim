@@ -1,0 +1,9 @@
+node_modules
+dist
+public/wasm
+public/worker
+*.ifc
+*.ifczip
+*.frag
+.DS_Store
+*.tsbuildinfo
