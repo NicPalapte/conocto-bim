@@ -9,6 +9,7 @@ import {
   type ElementProps,
   type RawItem,
 } from '../model/properties';
+import { coreBounds, type Bounds } from '../model/bounds';
 import { collectIds, type ItemLabel, type RawSpatialItem } from '../model/tree';
 
 export interface LoadedModel {
@@ -48,6 +49,7 @@ export class BimEngine {
   private loader!: OBC.IfcLoader;
   private hider!: OBC.Hider;
   private alignments = new Map<string, THREE.Object3D>();
+  private sceneRadius = 0;
   private ready: Promise<void> | null = null;
 
   init(container: HTMLElement): Promise<void> {
@@ -182,8 +184,42 @@ export class BimEngine {
     await this.fragments.core.update(true);
   }
 
+  /** Zoomt auf die Bauteile; ohne Angabe auf alle Modelle, abseits liegende Marker ausgenommen. */
   async fit(items?: OBC.ModelIdMap): Promise<void> {
-    await this.world.camera.fitToItems(items);
+    const box = coreBounds(await this.itemBounds(items));
+    if (!box) return;
+    const sphere = new THREE.Box3(
+      new THREE.Vector3(...box.min),
+      new THREE.Vector3(...box.max),
+    ).getBoundingSphere(new THREE.Sphere());
+    sphere.radius = Math.max(sphere.radius, 0.5);
+    if (!items) this.sceneRadius = sphere.radius;
+    this.updateClipping(Math.max(sphere.radius, this.sceneRadius));
+    await this.world.camera.controls.fitToSphere(sphere, true);
+  }
+
+  private async itemBounds(items?: OBC.ModelIdMap): Promise<Bounds[]> {
+    const boxes: Bounds[] = [];
+    for (const [modelId, model] of this.fragments.list) {
+      const ids = items ? [...(items[modelId] ?? [])] : await model.getItemsIdsWithGeometry();
+      if (!ids.length) continue;
+      for (const b of await model.getBoxes(ids)) {
+        boxes.push({ min: b.min.toArray(), max: b.max.toArray() });
+      }
+    }
+    return boxes;
+  }
+
+  /**
+   * Die Kamera hat ab Werk eine Sichtweite von 1000 m; größere oder weit verteilte Modelle
+   * würden abgeschnitten. Sichtweite und Nahgrenze folgen deshalb der Modellgröße.
+   */
+  private updateClipping(radius: number): void {
+    const camera = this.world.camera.three;
+    if (!(camera instanceof THREE.PerspectiveCamera)) return;
+    camera.near = Math.min(Math.max(radius / 5000, 0.01), 1);
+    camera.far = Math.max(radius * 40, 1000);
+    camera.updateProjectionMatrix();
   }
 
   /** Räumliche Gliederung und Namen/GUIDs aller Objekte, für den Bauteilbaum. */
