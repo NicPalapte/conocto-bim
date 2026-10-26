@@ -38,8 +38,6 @@ input {
   position: fixed;
   inset: 0;
   background-color: var(--paper);
-  background-image: radial-gradient(var(--line2) 1px, transparent 1px);
-  background-size: 24px 24px;
 }
 
 .stage canvas {

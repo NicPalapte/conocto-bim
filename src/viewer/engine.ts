@@ -63,7 +63,7 @@ export class BimEngine {
     const world = worlds.create<OBC.SimpleScene, OBC.SimpleCamera, OBC.SimpleRenderer>();
     world.scene = new OBC.SimpleScene(this.components);
     world.scene.setup();
-    // Transparenter Hintergrund: das Punktraster der Seite bleibt sichtbar.
+    // Transparenter Hintergrund: die Seitenfarbe (hell/dunkel) bleibt sichtbar.
     world.scene.three.background = null;
     world.renderer = new OBC.SimpleRenderer(this.components, container, { alpha: true });
     world.camera = new OBC.SimpleCamera(this.components);
