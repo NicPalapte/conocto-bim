@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Conocto-Krake (src/components/ui/ConoctoLogo.tsx) weiß auf ziegelroter
+       Kachel: liest sich im hellen wie im dunklen Browser-Tab. -->
+  <rect width="32" height="32" rx="7" fill="#c8362b"/>
+  <g transform="translate(4 4) scale(0.24)" fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round">
+    <path d="M50 31Q57.7 19 72.4 16.8 M63.4 36.6Q77.4 33.5 89.3 42.4 M69 50Q81 57.7 83.2 72.4 M63.4 63.4Q66.5 77.4 57.6 89.3 M50 69Q42.3 81 27.6 83.2 M36.6 63.4Q22.6 66.5 10.7 57.6 M31 50Q19 42.3 16.8 27.6 M36.6 36.6Q33.5 22.6 42.4 10.7"/>
+    <circle cx="50" cy="50" r="16" fill="#ffffff" stroke="none"/>
+  </g>
+</svg>
