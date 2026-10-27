@@ -50,6 +50,7 @@ export class BimEngine {
   private hider!: OBC.Hider;
   private alignments = new Map<string, THREE.Object3D>();
   private sceneRadius = 0;
+  private grid: OBC.SimpleGrid | null = null;
   private ready: Promise<void> | null = null;
 
   init(container: HTMLElement): Promise<void> {
@@ -62,13 +63,17 @@ export class BimEngine {
     const world = worlds.create<OBC.SimpleScene, OBC.SimpleCamera, OBC.SimpleRenderer>();
     world.scene = new OBC.SimpleScene(this.components);
     world.scene.setup();
-    // Transparenter Hintergrund: das Punktraster der Seite bleibt sichtbar.
+    // Transparenter Hintergrund: die Seitenfarbe (hell/dunkel) bleibt sichtbar.
     world.scene.three.background = null;
     world.renderer = new OBC.SimpleRenderer(this.components, container, { alpha: true });
     world.camera = new OBC.SimpleCamera(this.components);
     world.camera.controls.setLookAt(60, 40, 60, 0, 0, 0);
     this.components.init();
     this.world = world;
+    this.grid = this.components.get(OBC.Grids).create(world);
+    // Neutralgrau ist auf hellem und dunklem Hintergrund lesbar.
+    this.grid.config.color = new THREE.Color('#aeaeb2');
+    this.grid.config.visible = false;
 
     this.fragments = this.components.get(OBC.FragmentsManager);
     this.fragments.init(assetUrl('worker/fragments-worker.mjs'));
@@ -193,7 +198,10 @@ export class BimEngine {
       new THREE.Vector3(...box.max),
     ).getBoundingSphere(new THREE.Sphere());
     sphere.radius = Math.max(sphere.radius, 0.5);
-    if (!items) this.sceneRadius = sphere.radius;
+    if (!items) {
+      this.sceneRadius = sphere.radius;
+      this.placeGrid(box.min[1], sphere.radius);
+    }
     this.updateClipping(Math.max(sphere.radius, this.sceneRadius));
     await this.world.camera.controls.fitToSphere(sphere, true);
   }
@@ -208,6 +216,20 @@ export class BimEngine {
       }
     }
     return boxes;
+  }
+
+  /**
+   * Bodenraster unter dem tiefsten Punkt des Modells, damit Bauteile nicht im Raum schweben.
+   * Maschenweite wächst in Zehnerschritten mit der Modellgröße (1/10 m bis 100/1000 m).
+   */
+  private placeGrid(bottom: number, radius: number): void {
+    if (!this.grid) return;
+    const step = 10 ** Math.min(Math.max(Math.floor(Math.log10(radius / 10)), 0), 2);
+    this.grid.three.position.y = bottom;
+    this.grid.config.visible = true;
+    this.grid.config.primarySize = step;
+    this.grid.config.secondarySize = step * 10;
+    this.grid.config.distance = Math.max(radius * 4, 500);
   }
 
   /**
