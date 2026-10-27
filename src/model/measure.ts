@@ -1,20 +1,23 @@
 import type { Vec3 } from './bounds';
 
-// Dreiecke gelten als eine ebene Fläche, wenn ihre Normalen höchstens ~1,8° abweichen und
-// sie höchstens 2 mm neben der Ebene liegen. Ecken werden auf 0,1 mm gerundet verbunden.
-const COS_TOLERANCE = 0.9995;
+// Treffer-Toleranz zur Dreiecksebene: 2 mm. Ecken werden auf 0,1 mm gerundet verbunden.
 const PLANE_TOLERANCE = 0.002;
 const VERTEX_GRID = 1e4;
+/**
+ * Knick in Grad, ab dem eine neue Bauteilseite beginnt. web-ifc teilt Kreise in 12 bis
+ * 16 Facetten (22,5–30°); rechte Winkel und Fasen von 45° trennen noch.
+ */
+export const SIDE_ANGLE = 40;
 
-function sub(a: Vec3, b: Vec3): Vec3 {
+export function sub(a: Vec3, b: Vec3): Vec3 {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
 
-function dot(a: Vec3, b: Vec3): number {
+export function dot(a: Vec3, b: Vec3): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
-function cross(a: Vec3, b: Vec3): Vec3 {
+export function cross(a: Vec3, b: Vec3): Vec3 {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }
 
@@ -31,12 +34,12 @@ export function segment(a: Vec3, b: Vec3): { length: number; horizontal: number;
 /** Dreiecke als flache Liste, je Dreieck 9 Zahlen (drei Ecken x, y, z). */
 export type Triangles = ArrayLike<number>;
 
-function corner(t: Triangles, i: number, c: number): Vec3 {
+export function corner(t: Triangles, i: number, c: number): Vec3 {
   const o = i * 9 + c * 3;
   return [t[o], t[o + 1], t[o + 2]];
 }
 
-function triangleNormal(t: Triangles, i: number): { n: Vec3; area: number } {
+export function triangleNormal(t: Triangles, i: number): { n: Vec3; area: number } {
   const a = corner(t, i, 0);
   const c = cross(sub(corner(t, i, 1), a), sub(corner(t, i, 2), a));
   const len = length(c);
@@ -68,27 +71,32 @@ export function triangleAt(t: Triangles, p: Vec3): number {
   return best;
 }
 
-function vertexKey(v: Vec3): string {
+export function vertexKey(v: Vec3): string {
   return v.map((x) => Math.round(x * VERTEX_GRID)).join(',');
 }
 
 /**
- * Ebene Teilfläche eines Bauteils um den getroffenen Punkt: alle zusammenhängenden Dreiecke
- * in derselben Ebene. Liefert die Dreieck-Nummern und die Fläche in m².
+ * Bauteilseite um den getroffenen Punkt: alle zusammenhängenden Dreiecke, zwischen denen
+ * kein Knick über `maxAngle` Grad liegt. So zählt auch ein facettierter Mantel (Bohrpfahl)
+ * als eine Seite, die Kante zum Deckel aber trennt. Liefert Dreieck-Nummern und m².
  */
-export function planarFace(t: Triangles, p: Vec3): { triangles: number[]; area: number } | null {
+export function surfaceAt(
+  t: Triangles,
+  p: Vec3,
+  maxAngle = SIDE_ANGLE,
+): { triangles: number[]; area: number } | null {
   const seed = triangleAt(t, p);
   if (seed < 0) return null;
-  const { n } = triangleNormal(t, seed);
-  const origin = corner(t, seed, 0);
+  const minCos = Math.cos((maxAngle * Math.PI) / 180);
   const count = Math.floor(t.length / 9);
-  const candidates: number[] = [];
+  const normals: Vec3[] = [];
+  const areas: number[] = [];
   const byVertex = new Map<string, number[]>();
   for (let i = 0; i < count; i++) {
     const tn = triangleNormal(t, i);
-    if (!tn.area || dot(tn.n, n) < COS_TOLERANCE) continue;
-    if (Math.abs(dot(sub(corner(t, i, 0), origin), n)) > PLANE_TOLERANCE) continue;
-    candidates.push(i);
+    normals.push(tn.n);
+    areas.push(tn.area);
+    if (!tn.area) continue;
     for (let c = 0; c < 3; c++) {
       const key = vertexKey(corner(t, i, c));
       const list = byVertex.get(key) ?? [];
@@ -102,15 +110,14 @@ export function planarFace(t: Triangles, p: Vec3): { triangles: number[]; area: 
     const i = queue.pop()!;
     for (let c = 0; c < 3; c++) {
       for (const j of byVertex.get(vertexKey(corner(t, i, c))) ?? []) {
-        if (!seen.has(j)) {
-          seen.add(j);
-          queue.push(j);
-        }
+        if (seen.has(j) || dot(normals[i], normals[j]) < minCos) continue;
+        seen.add(j);
+        queue.push(j);
       }
     }
   }
   const triangles = [...seen].sort((a, b) => a - b);
-  const area = triangles.reduce((sum, i) => sum + triangleNormal(t, i).area, 0);
+  const area = triangles.reduce((sum, i) => sum + areas[i], 0);
   return { triangles, area };
 }
 

@@ -16,7 +16,14 @@ import { ConoctoMark } from './ui/ConoctoMark';
 import { MeasureLabels, type MeasureMode, type Measurement } from './ui/MeasureLabels';
 import { TreeLevel } from './ui/ModelTree';
 import { PropertiesPanel, type GroupInfo } from './ui/PropertiesPanel';
-import { BimEngine, type Pick, type SurfacePick, type ViewAxes } from './viewer/engine';
+import {
+  BimEngine,
+  type ElementAxes,
+  type Pick,
+  type Snap,
+  type SnapKind,
+  type ViewAxes,
+} from './viewer/engine';
 
 interface ModelEntry {
   id: string;
@@ -52,9 +59,21 @@ function accentColor(): string {
 const MODES: { mode: MeasureMode; label: string; hint: string }[] = [
   { mode: 'point', label: 'Punkt', hint: 'Punkt antippen' },
   { mode: 'distance', label: 'Strecke', hint: 'Start- und Endpunkt antippen' },
-  { mode: 'area', label: 'Fläche', hint: 'Fläche eines Bauteils antippen' },
+  { mode: 'area', label: 'Fläche', hint: 'Bauteilseiten antippen, Summe oben' },
   { mode: 'volume', label: 'Volumen', hint: 'Bauteil antippen' },
 ];
+
+const SNAP_LABEL: Record<SnapKind, string> = {
+  vertex: 'Eckpunkt',
+  edge: 'Kante',
+  axis: 'Bauteilachse',
+  surface: 'Fläche',
+};
+
+/** Messarten, bei denen Punkte einrasten. */
+function snaps(mode: MeasureMode | null): boolean {
+  return mode === 'point' || mode === 'distance';
+}
 
 function isIfc(file: File): boolean {
   return /\.ifc$/i.test(file.name);
@@ -78,7 +97,8 @@ export function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<MeasureMode | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
-  const [pending, setPending] = useState<Vec3 | null>(null);
+  const [pending, setPending] = useState<{ point: Vec3; axes: ElementAxes | null } | null>(null);
+  const [hover, setHover] = useState<Snap | null>(null);
   const [axes, setAxes] = useState<ViewAxes | null>(null);
   // Zählt Kamerabewegungen; Etiketten werden damit neu positioniert.
   const [, setViewTick] = useState(0);
@@ -232,17 +252,18 @@ export function App() {
   );
 
   const measure = useCallback(
-    async (pick: SurfacePick) => {
+    async (snap: Snap) => {
       if (!mode) return;
       const id = crypto.randomUUID();
       const add = (m: Omit<Measurement, 'id' | 'kind'>) =>
         setMeasurements((list) => [...list, { id, kind: mode, ...m }]);
+      const { point } = snap;
       if (mode === 'point') {
-        const c = engine.siteCoordinate(pick.point);
+        const c = engine.siteCoordinate(point);
         const [x, y, z] = c.map ?? c.model;
-        engine.drawPoints(id, [pick.point]);
+        engine.drawPoints(id, [point]);
         add({
-          anchor: pick.point,
+          anchor: point,
           lines: c.map
             ? [
                 `O ${formatCoordinate(x)}`,
@@ -261,19 +282,20 @@ export function App() {
       }
       if (mode === 'distance') {
         if (!pending) {
-          setPending(pick.point);
-          engine.drawPoints('pending', [pick.point]);
+          setPending({ point, axes: snap.axes });
+          engine.drawPoints('pending', [point]);
           return;
         }
         engine.removeDrawing('pending');
+        engine.drawPreview(null, null);
         setPending(null);
-        const a = engine.siteCoordinate(pending).model;
-        const b = engine.siteCoordinate(pick.point).model;
+        const a = engine.siteCoordinate(pending.point).model;
+        const b = engine.siteCoordinate(point).model;
         const s = segment(a, b);
-        engine.drawPoints(id, [pending, pick.point]);
-        engine.drawLine(id, pending, pick.point);
+        engine.drawPoints(id, [pending.point, point]);
+        engine.drawLine(id, pending.point, point);
         add({
-          anchor: pending.map((v, i) => (v + pick.point[i]) / 2) as Vec3,
+          anchor: pending.point.map((v, i) => (v + point[i]) / 2) as Vec3,
           lines: [
             formatLength(s.length),
             `waagerecht ${formatLength(s.horizontal)}`,
@@ -282,24 +304,26 @@ export function App() {
         });
         return;
       }
+      if (!snap.pick) return;
       if (mode === 'area') {
-        const area = await engine.measureFace(id, pick);
+        const area = await engine.measureFace(id, { ...snap.pick, point });
         if (area === null) {
-          setError('Hier wurde keine ebene Fläche gefunden.');
+          setError('Hier wurde keine Bauteilfläche gefunden.');
           return;
         }
-        add({ anchor: pick.point, lines: [formatArea(area), 'ebene Teilfläche'] });
+        add({ anchor: point, lines: [formatArea(area), 'Bauteilseite'], value: area });
         return;
       }
-      const volume = await engine.volume(pick);
-      const props = await engine.readProperties(pick).catch(() => null);
+      const volume = await engine.volume(snap.pick);
+      const props = await engine.readProperties(snap.pick).catch(() => null);
       const fromModel = props?.groups
         .filter((g) => g.kind === 'quantities')
         .flatMap((g) => g.rows)
         .find((r) => /volume/i.test(r.label));
-      engine.drawPoints(id, [pick.point]);
+      await engine.drawHull(id, snap.pick);
       add({
-        anchor: pick.point,
+        anchor: point,
+        value: volume,
         lines: [
           formatVolume(volume),
           props?.name ?? 'Bauteil',
@@ -322,12 +346,15 @@ export function App() {
     engine.clearDrawings();
     setMeasurements([]);
     setPending(null);
+    setHover(null);
   }, [engine]);
 
   const startMode = useCallback(
     (next: MeasureMode | null) => {
       engine.removeDrawing('pending');
+      engine.drawPreview(null, null);
       setPending(null);
+      setHover(null);
       setMode(next);
       if (next) setSelection(null);
     },
@@ -341,6 +368,7 @@ export function App() {
     let down: { x: number; y: number } | null = null;
     const onDown = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY };
+      setHover(null);
     };
     const onUp = async (e: PointerEvent) => {
       if (!down || e.button !== 0) return;
@@ -348,8 +376,10 @@ export function App() {
       down = null;
       if (moved > 4 || models.length === 0) return;
       if (mode) {
-        const hit = await engine.pickSurface(e);
-        if (hit) await measure(hit);
+        const snap = snaps(mode)
+          ? await engine.snap(e, pending, e.altKey)
+          : await engine.snap(e, null, true);
+        if (snap) await measure(snap);
         return;
       }
       selectElement(await engine.pick(e));
@@ -360,7 +390,48 @@ export function App() {
       stage.removeEventListener('pointerdown', onDown);
       stage.removeEventListener('pointerup', onUp);
     };
-  }, [engine, models.length, selectElement, mode, measure]);
+  }, [engine, models.length, selectElement, mode, pending, measure]);
+
+  // Beim Messen zeigt eine Marke unter dem Zeiger, wo der Punkt einrastet. Immer nur eine
+  // Abfrage gleichzeitig; Bewegungen dazwischen zählen nur mit ihrer letzten Position.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !snaps(mode)) return;
+    let busy = false;
+    let next: PointerEvent | null = null;
+    let active = true;
+    const run = async (e: PointerEvent) => {
+      busy = true;
+      const snap = await engine.snap(e, pending, e.altKey);
+      busy = false;
+      if (!active) return;
+      setHover(snap);
+      engine.drawPreview(pending?.point ?? null, snap?.point ?? null);
+      if (next) {
+        const latest = next;
+        next = null;
+        void run(latest);
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.buttons || e.pointerType === 'touch') return;
+      if (busy) next = e;
+      else void run(e);
+    };
+    const onLeave = () => {
+      next = null;
+      setHover(null);
+      engine.drawPreview(null, null);
+    };
+    stage.addEventListener('pointermove', onMove);
+    stage.addEventListener('pointerleave', onLeave);
+    return () => {
+      active = false;
+      stage.removeEventListener('pointermove', onMove);
+      stage.removeEventListener('pointerleave', onLeave);
+      engine.drawPreview(null, null);
+    };
+  }, [engine, mode, pending]);
 
   // Nach einem Klick in 3D die gewählte Zeile im Baum sichtbar machen.
   useEffect(() => {
@@ -374,6 +445,7 @@ export function App() {
       if (e.key !== 'Escape') return;
       if (pending) {
         engine.removeDrawing('pending');
+        engine.drawPreview(null, null);
         setPending(null);
       } else if (mode) setMode(null);
       else setSelection(null);
@@ -445,6 +517,16 @@ export function App() {
     selectedModel && selection?.element != null
       ? placementOf(selectedModel.tree, selection.element)
       : NO_PLACEMENT;
+  const total = useMemo(() => {
+    if (mode !== 'area' && mode !== 'volume') return null;
+    const values = measurements.filter((m) => m.kind === mode && m.value !== undefined);
+    if (values.length < 2) return null;
+    const sum = values.reduce((n, m) => n + (m.value ?? 0), 0);
+    return {
+      count: values.length,
+      text: `${mode === 'area' ? formatArea(sum) : formatVolume(sum)} · ${values.length}`,
+    };
+  }, [mode, measurements]);
   const totalElements = models.reduce((n, m) => n + m.elementCount, 0);
 
   return (
@@ -581,6 +663,11 @@ export function App() {
                   {m.label}
                 </button>
               ))}
+              {total && (
+                <span className="sum" title={`${total.count} Messungen zusammen`}>
+                  Σ {total.text}
+                </span>
+              )}
               <span className="divider" />
               <button
                 type="button"
@@ -649,6 +736,8 @@ export function App() {
         </div>
       )}
 
+      {hover && hover.kind !== 'surface' && <SnapMarker snap={hover} engine={engine} />}
+
       <MeasureLabels
         measurements={measurements}
         project={(p) => engine.project(p)}
@@ -662,7 +751,11 @@ export function App() {
       {models.length > 0 && (
         <div className={`hint float${mode ? ' measuring' : ''}`}>
           {mode
-            ? `${pending ? 'Endpunkt antippen' : MODES.find((m) => m.mode === mode)?.hint} · Esc beendet`
+            ? [
+                pending ? 'Endpunkt antippen' : MODES.find((m) => m.mode === mode)?.hint,
+                ...(snaps(mode) ? [hover ? snapLabel(hover) : 'Alt = ohne Einrasten'] : []),
+                'Esc beendet',
+              ].join(' · ')
             : 'Ziehen dreht · Rad zoomt · Klick wählt · Doppelklick im Baum zoomt'}
         </div>
       )}
@@ -701,4 +794,22 @@ function allKeys(nodes: TreeNode[], into: string[] = []): string[] {
     allKeys(n.children, into);
   }
   return into;
+}
+
+function snapLabel(snap: Snap): string {
+  if (snap.kind === 'axis') return `entlang Bauteil-${'XYZ'[snap.axis ?? 0]}`;
+  return SNAP_LABEL[snap.kind];
+}
+
+/** Fangmarke: Quadrat = Eckpunkt, Raute = Kante, Kreis = Bauteilachse. */
+function SnapMarker({ snap, engine }: { snap: Snap; engine: BimEngine }) {
+  const at = engine.project(snap.point);
+  if (!at.visible) return null;
+  return (
+    <div
+      className={`snap-marker kind-${snap.kind}`}
+      style={{ transform: `translate(${at.x}px, ${at.y}px)` }}
+      aria-hidden="true"
+    />
+  );
 }
