@@ -325,6 +325,97 @@ input {
   background: var(--sunken);
 }
 
+.toolbar .btn.active {
+  background: var(--blueS);
+  color: var(--blueD);
+}
+
+.toolbar .divider {
+  width: 1px;
+  margin: 4px 2px;
+  background: var(--line);
+}
+
+/* Achsenkreuz unten links, rechts neben der Modell-Leiste. */
+.axes {
+  position: fixed;
+  left: calc(12px + 280px + 12px);
+  bottom: 12px;
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
+  z-index: 1;
+}
+
+.axes .axis line {
+  stroke: var(--dim);
+  stroke-width: 1.5;
+}
+
+.axes .axis circle {
+  fill: var(--surface);
+  stroke: var(--line2);
+}
+
+.axes .axis text {
+  fill: var(--ink);
+  font-size: 10px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.axes .axis.back {
+  opacity: 0.45;
+}
+
+.axes .axis-z {
+  cursor: pointer;
+}
+
+/* Messwerte hängen am Punkt im Modell, Ecke unten links am Punkt. */
+.measure-label {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  margin: -8px 0 0 10px;
+  padding: 4px 4px 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 8px);
+  background: var(--glass-strong, var(--surface));
+  box-shadow: var(--shadow-sm);
+  font-size: var(--fs-label);
+  line-height: 1.35;
+  white-space: nowrap;
+  user-select: text;
+  z-index: 1;
+}
+
+.measure-label .main {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.measure-label .sub {
+  color: var(--mute);
+}
+
+.measure-label.kind-point .main,
+.measure-label.kind-point .values > div:nth-child(-n + 3) {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.measure-label .icon-btn {
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+.hint.measuring {
+  color: var(--ink);
+}
+
 .hint {
   position: fixed;
   bottom: 12px;
@@ -503,5 +594,12 @@ input {
   .toolbar {
     top: auto;
     bottom: 48px;
+    max-width: calc(100% - 24px);
+    overflow-x: auto;
+  }
+
+  .axes {
+    left: 12px;
+    bottom: calc(40% + 24px);
   }
 }

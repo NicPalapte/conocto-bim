@@ -9,8 +9,11 @@ import {
   type ElementProps,
   type RawItem,
 } from '../model/properties';
-import { coreBounds, type Bounds } from '../model/bounds';
+import { coreBounds, type Bounds, type Vec3 } from '../model/bounds';
+import { parseMapConversion, toMap, type MapConversion } from '../model/georef';
+import { planarFace } from '../model/measure';
 import { collectIds, type ItemLabel, type RawSpatialItem } from '../model/tree';
+import { MeasureOverlay } from './overlay';
 
 export interface LoadedModel {
   id: string;
@@ -23,6 +26,21 @@ export interface Pick {
   modelId: string;
   localId: number;
 }
+
+/** Getroffener Punkt auf einem Bauteil, in Szenen-Koordinaten. */
+export interface SurfacePick extends Pick {
+  point: Vec3;
+}
+
+/** Koordinate eines Punkts: im Modell (IFC, Meter) und, falls georeferenziert, im Kartennetz. */
+export interface SiteCoordinate {
+  model: Vec3;
+  map: Vec3 | null;
+  crs: string | null;
+}
+
+/** Bildschirmrichtung der IFC-Achsen X (Ost), Y (Nord), Z (Höhe); y zeigt nach unten. */
+export type ViewAxes = Record<'x' | 'y' | 'z', { dx: number; dy: number; depth: number }>;
 
 export type Progress = (share: number) => void;
 
@@ -51,6 +69,9 @@ export class BimEngine {
   private alignments = new Map<string, THREE.Object3D>();
   private sceneRadius = 0;
   private grid: OBC.SimpleGrid | null = null;
+  private readonly overlay = new MeasureOverlay();
+  private georef: MapConversion | null = null;
+  private georefKnown = false;
   private ready: Promise<void> | null = null;
 
   init(container: HTMLElement): Promise<void> {
@@ -74,6 +95,7 @@ export class BimEngine {
     // Neutralgrau ist auf hellem und dunklem Hintergrund lesbar.
     this.grid.config.color = new THREE.Color('#aeaeb2');
     this.grid.config.visible = false;
+    world.scene.three.add(this.overlay.group);
 
     this.fragments = this.components.get(OBC.FragmentsManager);
     this.fragments.init(assetUrl('worker/fragments-worker.mjs'));
@@ -101,6 +123,13 @@ export class BimEngine {
   async load(file: File, onProgress: Progress): Promise<LoadedModel> {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const schema = readSchema(bytes);
+    // Die Georeferenz des ersten Modells gilt für alle: That Open richtet weitere Modelle
+    // am ersten aus. Sie steht im Dateikopf, deshalb reichen die ersten 2 MB.
+    if (this.fragments.list.size === 0) this.georefKnown = false;
+    if (!this.georefKnown) {
+      this.georef = parseMapConversion(new TextDecoder().decode(bytes.subarray(0, 2 ** 21)));
+      this.georefKnown = true;
+    }
     const id = `${file.name}#${crypto.randomUUID().slice(0, 8)}`;
     const model = await this.loader.load(bytes, true, id, {
       processData: { progressCallback: (share) => onProgress(share) },
@@ -141,6 +170,148 @@ export class BimEngine {
       dom: this.canvas,
     });
     return hit ? { modelId: hit.fragments.modelId, localId: hit.localId } : null;
+  }
+
+  async pickSurface(event: PointerEvent | MouseEvent): Promise<SurfacePick | null> {
+    const hit = await this.fragments.raycast({
+      camera: this.world.camera.three,
+      mouse: new THREE.Vector2(event.clientX, event.clientY),
+      dom: this.canvas,
+    });
+    if (!hit) return null;
+    return {
+      modelId: hit.fragments.modelId,
+      localId: hit.localId,
+      point: hit.point.toArray() as Vec3,
+    };
+  }
+
+  /**
+   * Szenen-Punkt → Koordinate der Datei. That Open verschiebt Modelle zum Nullpunkt und
+   * dreht auf „Y oben“; beides wird hier zurückgerechnet (IFC: x Ost, y Nord, z Höhe).
+   */
+  siteCoordinate(point: Vec3): SiteCoordinate {
+    const p = new THREE.Vector3(...point).applyMatrix4(
+      this.fragments.baseCoordinationMatrix.clone().invert(),
+    );
+    const model: Vec3 = [p.x, -p.z, p.y];
+    return {
+      model,
+      map: this.georef ? toMap(model, this.georef) : null,
+      crs: this.georef?.crs ?? null,
+    };
+  }
+
+  /** Ebene Teilfläche am getroffenen Punkt; zeichnet sie unter `id` ein. */
+  async measureFace(id: string, pick: SurfacePick): Promise<number | null> {
+    const model = this.model(pick.modelId);
+    const [meshes = []] = await model.getItemsGeometry([pick.localId]);
+    const triangles: number[] = [];
+    const v = new THREE.Vector3();
+    for (const mesh of meshes) {
+      if (!mesh.positions) continue;
+      const matrix = model.object.matrixWorld.clone().multiply(mesh.transform);
+      const index = mesh.indices ?? Array.from({ length: mesh.positions.length / 3 }, (_, i) => i);
+      for (let i = 0; i + 2 < index.length; i += 3) {
+        for (let c = 0; c < 3; c++) {
+          const k = index[i + c] * 3;
+          v.set(mesh.positions[k], mesh.positions[k + 1], mesh.positions[k + 2]);
+          v.applyMatrix4(matrix);
+          triangles.push(v.x, v.y, v.z);
+        }
+      }
+    }
+    const face = planarFace(triangles, pick.point);
+    if (!face) return null;
+    const picked = face.triangles.flatMap((t) => triangles.slice(t * 9, t * 9 + 9));
+    this.overlay.addFace(id, picked);
+    return face.area;
+  }
+
+  /** Volumen eines Bauteils aus der Geometrie, in m³. */
+  async volume(pick: Pick): Promise<number> {
+    return this.model(pick.modelId).getItemsVolume([pick.localId]);
+  }
+
+  drawPoints(id: string, points: Vec3[]): void {
+    this.overlay.addPoints(id, points);
+  }
+
+  drawLine(id: string, a: Vec3, b: Vec3): void {
+    this.overlay.addLine(id, a, b);
+  }
+
+  setOverlayColor(color: string): void {
+    this.overlay.setColor(color);
+  }
+
+  removeDrawing(id: string): void {
+    this.overlay.remove(id);
+  }
+
+  clearDrawings(): void {
+    this.overlay.clear();
+  }
+
+  /** Bildschirmposition eines Szenen-Punkts relativ zur Zeichenfläche. */
+  project(point: Vec3): { x: number; y: number; visible: boolean } {
+    const v = new THREE.Vector3(...point).project(this.world.camera.three);
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: rect.left + ((v.x + 1) / 2) * rect.width,
+      y: rect.top + ((1 - v.y) / 2) * rect.height,
+      visible: v.z > -1 && v.z < 1,
+    };
+  }
+
+  /** Meldet jede Kamerabewegung und Größenänderung, höchstens einmal je Bild. */
+  onViewChange(listener: () => void): () => void {
+    let frame = 0;
+    const notify = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        listener();
+      });
+    };
+    const controls = this.world.camera.controls;
+    controls.addEventListener('update', notify);
+    window.addEventListener('resize', notify);
+    notify();
+    return () => {
+      controls.removeEventListener('update', notify);
+      window.removeEventListener('resize', notify);
+      cancelAnimationFrame(frame);
+    };
+  }
+
+  viewAxes(): ViewAxes {
+    const rotation = new THREE.Matrix4().extractRotation(
+      this.world.camera.three.matrixWorldInverse,
+    );
+    const axis = (x: number, y: number, z: number) => {
+      const v = new THREE.Vector3(x, y, z).applyMatrix4(rotation);
+      return { dx: v.x, dy: -v.y, depth: v.z };
+    };
+    // IFC x = Szene x, IFC y (Nord) = Szene −z, IFC z (Höhe) = Szene y.
+    return { x: axis(1, 0, 0), y: axis(0, 0, -1), z: axis(0, 1, 0) };
+  }
+
+  /** Draufsicht auf den aktuellen Mittelpunkt, Norden oben. */
+  async viewFromTop(): Promise<void> {
+    const controls = this.world.camera.controls;
+    const target = controls.getTarget(new THREE.Vector3());
+    const distance = this.world.camera.three.position.distanceTo(target);
+    // Ein Hauch nach Süden versetzt: genau senkrecht verliert die Kamera die Nordrichtung.
+    await controls.setLookAt(
+      target.x,
+      target.y + distance,
+      target.z + distance * 1e-4,
+      target.x,
+      target.y,
+      target.z,
+      true,
+    );
   }
 
   /** Hebt Bauteile in der Akzentfarbe hervor; `null` hebt die Hervorhebung auf. */
