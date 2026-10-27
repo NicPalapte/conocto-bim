@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Vec3 } from './model/bounds';
+import { formatArea, formatCoordinate, formatLength, formatVolume, segment } from './model/measure';
 import type { ElementProps } from './model/properties';
 import {
   buildTree,
@@ -9,10 +11,12 @@ import {
   type Placement,
   type TreeNode,
 } from './model/tree';
+import { AxisGizmo } from './ui/AxisGizmo';
 import { ConoctoMark } from './ui/ConoctoMark';
+import { MeasureLabels, type MeasureMode, type Measurement } from './ui/MeasureLabels';
 import { TreeLevel } from './ui/ModelTree';
 import { PropertiesPanel, type GroupInfo } from './ui/PropertiesPanel';
-import { BimEngine, type Pick } from './viewer/engine';
+import { BimEngine, type Pick, type SurfacePick, type ViewAxes } from './viewer/engine';
 
 interface ModelEntry {
   id: string;
@@ -45,6 +49,13 @@ function accentColor(): string {
   return getComputedStyle(document.documentElement).getPropertyValue('--blue').trim() || '#c8362b';
 }
 
+const MODES: { mode: MeasureMode; label: string; hint: string }[] = [
+  { mode: 'point', label: 'Punkt', hint: 'Punkt antippen' },
+  { mode: 'distance', label: 'Strecke', hint: 'Start- und Endpunkt antippen' },
+  { mode: 'area', label: 'Fläche', hint: 'Fläche eines Bauteils antippen' },
+  { mode: 'volume', label: 'Volumen', hint: 'Bauteil antippen' },
+];
+
 function isIfc(file: File): boolean {
   return /\.ifc$/i.test(file.name);
 }
@@ -65,9 +76,29 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [mode, setMode] = useState<MeasureMode | null>(null);
+  const [measurements, setMeasurements] = useState<Measurement[]>([]);
+  const [pending, setPending] = useState<Vec3 | null>(null);
+  const [axes, setAxes] = useState<ViewAxes | null>(null);
+  // Zählt Kamerabewegungen; Etiketten werden damit neu positioniert.
+  const [, setViewTick] = useState(0);
 
   useEffect(() => {
-    if (stageRef.current) void engine.init(stageRef.current);
+    if (!stageRef.current) return;
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    void engine.init(stageRef.current).then(() => {
+      if (cancelled) return;
+      engine.setOverlayColor(accentColor());
+      stop = engine.onViewChange(() => {
+        setAxes(engine.viewAxes());
+        setViewTick((t) => t + 1);
+      });
+    });
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
   }, [engine]);
 
   // Auswahl → Hervorhebung im Modell.
@@ -200,7 +231,110 @@ export function App() {
     [models],
   );
 
-  // Klick (ohne Ziehen) in der 3D-Ansicht wählt ein Bauteil.
+  const measure = useCallback(
+    async (pick: SurfacePick) => {
+      if (!mode) return;
+      const id = crypto.randomUUID();
+      const add = (m: Omit<Measurement, 'id' | 'kind'>) =>
+        setMeasurements((list) => [...list, { id, kind: mode, ...m }]);
+      if (mode === 'point') {
+        const c = engine.siteCoordinate(pick.point);
+        const [x, y, z] = c.map ?? c.model;
+        engine.drawPoints(id, [pick.point]);
+        add({
+          anchor: pick.point,
+          lines: c.map
+            ? [
+                `O ${formatCoordinate(x)}`,
+                `N ${formatCoordinate(y)}`,
+                `H ${formatCoordinate(z)}`,
+                c.crs ?? 'Landeskoordinaten',
+              ]
+            : [
+                `X ${formatCoordinate(x)}`,
+                `Y ${formatCoordinate(y)}`,
+                `Z ${formatCoordinate(z)}`,
+                'Modellkoordinaten',
+              ],
+        });
+        return;
+      }
+      if (mode === 'distance') {
+        if (!pending) {
+          setPending(pick.point);
+          engine.drawPoints('pending', [pick.point]);
+          return;
+        }
+        engine.removeDrawing('pending');
+        setPending(null);
+        const a = engine.siteCoordinate(pending).model;
+        const b = engine.siteCoordinate(pick.point).model;
+        const s = segment(a, b);
+        engine.drawPoints(id, [pending, pick.point]);
+        engine.drawLine(id, pending, pick.point);
+        add({
+          anchor: pending.map((v, i) => (v + pick.point[i]) / 2) as Vec3,
+          lines: [
+            formatLength(s.length),
+            `waagerecht ${formatLength(s.horizontal)}`,
+            `Höhe ${s.rise >= 0 ? '+' : '−'}${formatLength(Math.abs(s.rise))}`,
+          ],
+        });
+        return;
+      }
+      if (mode === 'area') {
+        const area = await engine.measureFace(id, pick);
+        if (area === null) {
+          setError('Hier wurde keine ebene Fläche gefunden.');
+          return;
+        }
+        add({ anchor: pick.point, lines: [formatArea(area), 'ebene Teilfläche'] });
+        return;
+      }
+      const volume = await engine.volume(pick);
+      const props = await engine.readProperties(pick).catch(() => null);
+      const fromModel = props?.groups
+        .filter((g) => g.kind === 'quantities')
+        .flatMap((g) => g.rows)
+        .find((r) => /volume/i.test(r.label));
+      engine.drawPoints(id, [pick.point]);
+      add({
+        anchor: pick.point,
+        lines: [
+          formatVolume(volume),
+          props?.name ?? 'Bauteil',
+          ...(fromModel ? [`im Modell: ${fromModel.label} ${fromModel.value}`] : []),
+        ],
+      });
+    },
+    [engine, mode, pending],
+  );
+
+  const removeMeasurement = useCallback(
+    (id: string) => {
+      engine.removeDrawing(id);
+      setMeasurements((list) => list.filter((m) => m.id !== id));
+    },
+    [engine],
+  );
+
+  const clearMeasurements = useCallback(() => {
+    engine.clearDrawings();
+    setMeasurements([]);
+    setPending(null);
+  }, [engine]);
+
+  const startMode = useCallback(
+    (next: MeasureMode | null) => {
+      engine.removeDrawing('pending');
+      setPending(null);
+      setMode(next);
+      if (next) setSelection(null);
+    },
+    [engine],
+  );
+
+  // Klick (ohne Ziehen) in der 3D-Ansicht wählt ein Bauteil oder misst.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -213,6 +347,11 @@ export function App() {
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       down = null;
       if (moved > 4 || models.length === 0) return;
+      if (mode) {
+        const hit = await engine.pickSurface(e);
+        if (hit) await measure(hit);
+        return;
+      }
       selectElement(await engine.pick(e));
     };
     stage.addEventListener('pointerdown', onDown);
@@ -221,7 +360,7 @@ export function App() {
       stage.removeEventListener('pointerdown', onDown);
       stage.removeEventListener('pointerup', onUp);
     };
-  }, [engine, models.length, selectElement]);
+  }, [engine, models.length, selectElement, mode, measure]);
 
   // Nach einem Klick in 3D die gewählte Zeile im Baum sichtbar machen.
   useEffect(() => {
@@ -232,11 +371,16 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelection(null);
+      if (e.key !== 'Escape') return;
+      if (pending) {
+        engine.removeDrawing('pending');
+        setPending(null);
+      } else if (mode) setMode(null);
+      else setSelection(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [engine, mode, pending]);
 
   const toggle = useCallback((key: string) => {
     setExpanded((e) => {
@@ -423,26 +567,60 @@ export function App() {
           >
             ⤢ Alles zeigen
           </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={!selectionMap}
-            onClick={() => selectionMap && void engine.isolate(selectionMap)}
-          >
-            ◎ Isolieren
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={!selectionMap}
-            onClick={() => {
-              if (!selectionMap) return;
-              void engine.hide(selectionMap);
-              setSelection(null);
-            }}
-          >
-            ◌ Ausblenden
-          </button>
+          {mode ? (
+            <>
+              <span className="divider" />
+              {MODES.map((m) => (
+                <button
+                  key={m.mode}
+                  type="button"
+                  className={`btn${mode === m.mode ? ' active' : ''}`}
+                  aria-pressed={mode === m.mode}
+                  onClick={() => startMode(m.mode)}
+                >
+                  {m.label}
+                </button>
+              ))}
+              <span className="divider" />
+              <button
+                type="button"
+                className="btn"
+                disabled={measurements.length === 0 && !pending}
+                onClick={clearMeasurements}
+              >
+                Löschen
+              </button>
+              <button type="button" className="btn" onClick={() => startMode(null)}>
+                Fertig
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn"
+                disabled={!selectionMap}
+                onClick={() => selectionMap && void engine.isolate(selectionMap)}
+              >
+                ◎ Isolieren
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={!selectionMap}
+                onClick={() => {
+                  if (!selectionMap) return;
+                  void engine.hide(selectionMap);
+                  setSelection(null);
+                }}
+              >
+                ◌ Ausblenden
+              </button>
+              <button type="button" className="btn" onClick={() => startMode('distance')}>
+                ⟷ Messen
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -471,9 +649,21 @@ export function App() {
         </div>
       )}
 
+      <MeasureLabels
+        measurements={measurements}
+        project={(p) => engine.project(p)}
+        onRemove={removeMeasurement}
+      />
+
+      {models.length > 0 && axes && (
+        <AxisGizmo axes={axes} onTop={() => void engine.viewFromTop()} />
+      )}
+
       {models.length > 0 && (
-        <div className="hint float">
-          Ziehen dreht · Rad zoomt · Klick wählt · Doppelklick im Baum zoomt
+        <div className={`hint float${mode ? ' measuring' : ''}`}>
+          {mode
+            ? `${pending ? 'Endpunkt antippen' : MODES.find((m) => m.mode === mode)?.hint} · Esc beendet`
+            : 'Ziehen dreht · Rad zoomt · Klick wählt · Doppelklick im Baum zoomt'}
         </div>
       )}
 
