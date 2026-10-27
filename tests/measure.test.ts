@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { lengthUnit, parseMapConversion, toMap } from '../src/model/georef';
-import { formatArea, planarFace, segment } from '../src/model/measure';
+import { formatArea, segment, surfaceAt } from '../src/model/measure';
+import { closestOnLineToRay, snapGeometry } from '../src/model/snap';
 
 /** Quader 2 × 3 × 1 m (x, y, z) als Dreiecksliste, je Seite zwei Dreiecke. */
 function box(): number[] {
@@ -21,20 +22,69 @@ function box(): number[] {
   ];
 }
 
-describe('planarFace', () => {
+describe('surfaceAt', () => {
   it('findet die angetippte Seite und ihre Fläche', () => {
-    expect(planarFace(box(), [1, 1.5, 1])?.area).toBeCloseTo(6);
-    expect(planarFace(box(), [1, 0, 0.5])?.area).toBeCloseTo(2);
-    expect(planarFace(box(), [2, 1, 0.5])?.triangles).toHaveLength(2);
+    expect(surfaceAt(box(), [1, 1.5, 1])?.area).toBeCloseTo(6);
+    expect(surfaceAt(box(), [1, 0, 0.5])?.area).toBeCloseTo(2);
+    expect(surfaceAt(box(), [2, 1, 0.5])?.triangles).toHaveLength(2);
   });
 
   it('trennt gleich ausgerichtete, aber nicht verbundene Flächen', () => {
     const second = box().map((v, i) => (i % 3 === 0 ? v + 10 : v));
-    expect(planarFace([...box(), ...second], [1, 1.5, 1])?.area).toBeCloseTo(6);
+    expect(surfaceAt([...box(), ...second], [1, 1.5, 1])?.area).toBeCloseTo(6);
   });
 
   it('liefert null neben dem Bauteil', () => {
-    expect(planarFace(box(), [5, 5, 5])).toBeNull();
+    expect(surfaceAt(box(), [5, 5, 5])).toBeNull();
+  });
+});
+
+/** Pfahl: Zylinder r = 0,5 m, h = 10 m, Mantel aus `n` Facetten, Deckel und Boden als Fächer. */
+function pile(n = 16): number[] {
+  const r = 0.5;
+  const h = 10;
+  const p = (i: number, z: number) => [
+    r * Math.cos((2 * Math.PI * i) / n),
+    r * Math.sin((2 * Math.PI * i) / n),
+    z,
+  ];
+  const t: number[] = [];
+  for (let i = 0; i < n; i++) {
+    t.push(...p(i, 0), ...p(i + 1, 0), ...p(i + 1, h));
+    t.push(...p(i, 0), ...p(i + 1, h), ...p(i, h));
+    t.push(0, 0, h, ...p(i, h), ...p(i + 1, h));
+    t.push(0, 0, 0, ...p(i + 1, 0), ...p(i, 0));
+  }
+  return t;
+}
+
+describe('surfaceAt am Pfahl', () => {
+  it('nimmt den ganzen facettierten Mantel', () => {
+    const n = 16;
+    const face = surfaceAt(pile(n), [0.5 * Math.cos(Math.PI / n) - 1e-4, 0, 5]);
+    expect(face?.triangles).toHaveLength(2 * n);
+    // Facetten-Umfang: n · 2r · sin(π/n), mal Höhe.
+    expect(face?.area).toBeCloseTo(n * 2 * 0.5 * Math.sin(Math.PI / n) * 10, 6);
+  });
+
+  it('trennt den Deckel vom Mantel', () => {
+    expect(surfaceAt(pile(), [0, 0, 10])?.triangles).toHaveLength(16);
+  });
+});
+
+describe('snapGeometry', () => {
+  it('liefert Ecken und nur echte Kanten', () => {
+    const { vertices, edges } = snapGeometry(pile(16));
+    expect(vertices).toHaveLength(34);
+    // Kreis oben und unten je 16 Kanten; Mantel- und Fächerkanten zählen nicht.
+    expect(edges).toHaveLength(32);
+  });
+});
+
+describe('closestOnLineToRay', () => {
+  it('findet den Punkt auf der Achse unter dem Sichtstrahl', () => {
+    // Achse z durch den Ursprung, Sichtstrahl waagerecht in Höhe 3.
+    expect(closestOnLineToRay([0, 0, 0], [0, 0, 1], [5, 0, 3], [-1, 0, 0])).toBeCloseTo(3);
   });
 });
 

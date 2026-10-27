@@ -11,7 +11,14 @@ import {
 } from '../model/properties';
 import { coreBounds, type Bounds, type Vec3 } from '../model/bounds';
 import { parseMapConversion, toMap, type MapConversion } from '../model/georef';
-import { planarFace } from '../model/measure';
+import { surfaceAt } from '../model/measure';
+import {
+  along,
+  closestOnLineToRay,
+  orthonormal,
+  snapGeometry,
+  type SnapGeometry,
+} from '../model/snap';
 import { collectIds, type ItemLabel, type RawSpatialItem } from '../model/tree';
 import { MeasureOverlay } from './overlay';
 
@@ -31,6 +38,36 @@ export interface Pick {
 export interface SurfacePick extends Pick {
   point: Vec3;
 }
+
+export type SnapKind = 'vertex' | 'edge' | 'axis' | 'surface';
+
+/** Achsen eines Bauteils (x, y, z) als Einheitsvektoren in Szenen-Koordinaten. */
+export type ElementAxes = [Vec3, Vec3, Vec3];
+
+/** Punkt, an dem ein Messklick landet, mit Art des Einrastens. */
+export interface Snap {
+  point: Vec3;
+  kind: SnapKind;
+  /** Getroffenes Bauteil; bei Achsen-Einrasten neben dem Modell `null`. */
+  pick: Pick | null;
+  /** Achsen des getroffenen Bauteils, für die Richtung der nächsten Strecke. */
+  axes: ElementAxes | null;
+  /** 0 = x, 1 = y, 2 = z bei `kind === 'axis'`. */
+  axis?: number;
+}
+
+interface ElementGeometry {
+  /** Dreiecke in Szenen-Koordinaten, je Dreieck 9 Zahlen. */
+  triangles: number[];
+  axes: ElementAxes;
+  snap: SnapGeometry | null;
+}
+
+// Fangradien in Bildschirmpixeln: Eckpunkt vor Achse vor Kante.
+const SNAP_VERTEX_PX = 12;
+const SNAP_AXIS_PX = 10;
+const SNAP_EDGE_PX = 8;
+const GEOMETRY_CACHE = 64;
 
 /** Koordinate eines Punkts: im Modell (IFC, Meter) und, falls georeferenziert, im Kartennetz. */
 export interface SiteCoordinate {
@@ -72,6 +109,7 @@ export class BimEngine {
   private readonly overlay = new MeasureOverlay();
   private georef: MapConversion | null = null;
   private georefKnown = false;
+  private readonly geometries = new Map<string, ElementGeometry>();
   private ready: Promise<void> | null = null;
 
   init(container: HTMLElement): Promise<void> {
@@ -160,6 +198,9 @@ export class BimEngine {
       this.world.scene.three.remove(group);
       this.alignments.delete(modelId);
     }
+    for (const key of [...this.geometries.keys()]) {
+      if (key.startsWith(`${modelId}\n`)) this.geometries.delete(key);
+    }
     await this.fragments.core.disposeModel(modelId);
   }
 
@@ -202,15 +243,130 @@ export class BimEngine {
     };
   }
 
-  /** Ebene Teilfläche am getroffenen Punkt; zeichnet sie unter `id` ein. */
+  /**
+   * Wohin ein Messklick einrastet: Eckpunkt, Kante oder Fläche des getroffenen Bauteils.
+   * Mit `from` (erster Punkt einer Strecke) zusätzlich entlang der Bauteilachsen x, y, z,
+   * auch neben dem Modell. `free` schaltet das Einrasten aus.
+   */
+  async snap(
+    event: PointerEvent | MouseEvent,
+    from: { point: Vec3; axes: ElementAxes | null } | null,
+    free = false,
+  ): Promise<Snap | null> {
+    const hit = await this.pickSurface(event);
+    const geometry = hit ? await this.geometry(hit) : null;
+    const surface: Snap | null = hit
+      ? { point: hit.point, kind: 'surface', pick: hit, axes: geometry?.axes ?? null }
+      : null;
+    if (free) return surface;
+    const cursor = { x: event.clientX, y: event.clientY };
+    const distance = (p: Vec3) => {
+      const s = this.project(p);
+      return Math.hypot(s.x - cursor.x, s.y - cursor.y);
+    };
+    const ray = this.ray(event);
+
+    if (hit && geometry) {
+      geometry.snap ??= snapGeometry(geometry.triangles);
+      let best: Vec3 | null = null;
+      let bestDist = SNAP_VERTEX_PX;
+      for (const v of geometry.snap.vertices) {
+        const d = distance(v);
+        if (d < bestDist) [best, bestDist] = [v, d];
+      }
+      if (best) return { ...surface!, point: best, kind: 'vertex' };
+    }
+
+    if (from?.axes) {
+      const start = this.project(from.point);
+      if (Math.hypot(start.x - cursor.x, start.y - cursor.y) > SNAP_AXIS_PX * 2) {
+        let best: Snap | null = null;
+        let bestDist = SNAP_AXIS_PX;
+        from.axes.forEach((dir, axis) => {
+          const p = along(from.point, dir, closestOnLineToRay(from.point, dir, ...ray));
+          const d = distance(p);
+          if (d < bestDist) {
+            bestDist = d;
+            best = { point: p, kind: 'axis', axis, pick: hit, axes: from.axes };
+          }
+        });
+        if (best) return best;
+      }
+    }
+
+    if (hit && geometry?.snap) {
+      let best: Vec3 | null = null;
+      let bestDist = SNAP_EDGE_PX;
+      for (const [a, b] of geometry.snap.edges) {
+        const dir: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const t = Math.min(Math.max(closestOnLineToRay(a, dir, ...ray), 0), 1);
+        const p = along(a, dir, t);
+        const d = distance(p);
+        if (d < bestDist) [best, bestDist] = [p, d];
+      }
+      if (best) return { ...surface!, point: best, kind: 'edge' };
+    }
+    return surface;
+  }
+
+  /** Bauteilseite am getroffenen Punkt (auch gekrümmt); zeichnet sie unter `id` ein. */
   async measureFace(id: string, pick: SurfacePick): Promise<number | null> {
+    const { triangles } = await this.geometry(pick);
+    const face = surfaceAt(triangles, pick.point);
+    if (!face) return null;
+    const picked = face.triangles.flatMap((t) => triangles.slice(t * 9, t * 9 + 9));
+    this.overlay.addFace(id, picked);
+    return face.area;
+  }
+
+  /** Volumen eines Bauteils aus der Geometrie, in m³. */
+  async volume(pick: Pick): Promise<number> {
+    return this.model(pick.modelId).getItemsVolume([pick.localId]);
+  }
+
+  /** Ganze Hülle eines Bauteils einfärben. */
+  async drawHull(id: string, pick: Pick): Promise<void> {
+    this.overlay.addFace(id, (await this.geometry(pick)).triangles);
+  }
+
+  /** Vorschau beim Messen: Gummiband vom ersten Punkt und Fangpunkt unter dem Zeiger. */
+  drawPreview(from: Vec3 | null, to: Vec3 | null): void {
+    this.overlay.remove('preview');
+    if (from && to) this.overlay.addLine('preview', from, to, true);
+  }
+
+  private ray(event: PointerEvent | MouseEvent): [Vec3, Vec3] {
+    const rect = this.canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(ndc, this.world.camera.three);
+    return [raycaster.ray.origin.toArray() as Vec3, raycaster.ray.direction.toArray() as Vec3];
+  }
+
+  /** Dreiecke und Achsen eines Bauteils in Szenen-Koordinaten; die letzten 64 bleiben gemerkt. */
+  private async geometry(pick: Pick): Promise<ElementGeometry> {
+    const key = `${pick.modelId}\n${pick.localId}`;
+    const cached = this.geometries.get(key);
+    if (cached) return cached;
     const model = this.model(pick.modelId);
     const [meshes = []] = await model.getItemsGeometry([pick.localId]);
     const triangles: number[] = [];
+    let axes: ElementAxes | null = null;
     const v = new THREE.Vector3();
     for (const mesh of meshes) {
       if (!mesh.positions) continue;
       const matrix = model.object.matrixWorld.clone().multiply(mesh.transform);
+      if (!axes) {
+        // Lage des Bauteils: Spalten der Drehung = Bauteilachsen x, y, z.
+        const x = new THREE.Vector3();
+        const y = new THREE.Vector3();
+        const z = new THREE.Vector3();
+        matrix.extractBasis(x, y, z);
+        axes = orthonormal(x.toArray() as Vec3, z.toArray() as Vec3);
+      }
       const index = mesh.indices ?? Array.from({ length: mesh.positions.length / 3 }, (_, i) => i);
       for (let i = 0; i + 2 < index.length; i += 3) {
         for (let c = 0; c < 3; c++) {
@@ -221,16 +377,20 @@ export class BimEngine {
         }
       }
     }
-    const face = planarFace(triangles, pick.point);
-    if (!face) return null;
-    const picked = face.triangles.flatMap((t) => triangles.slice(t * 9, t * 9 + 9));
-    this.overlay.addFace(id, picked);
-    return face.area;
-  }
-
-  /** Volumen eines Bauteils aus der Geometrie, in m³. */
-  async volume(pick: Pick): Promise<number> {
-    return this.model(pick.modelId).getItemsVolume([pick.localId]);
+    const geometry: ElementGeometry = {
+      triangles,
+      axes: axes ?? [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+      ],
+      snap: null,
+    };
+    if (this.geometries.size >= GEOMETRY_CACHE) {
+      this.geometries.delete(this.geometries.keys().next().value!);
+    }
+    this.geometries.set(key, geometry);
+    return geometry;
   }
 
   drawPoints(id: string, points: Vec3[]): void {

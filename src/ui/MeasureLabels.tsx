@@ -8,6 +8,8 @@ export interface Measurement {
   /** Szenen-Punkt, an dem das Etikett hängt. */
   anchor: Vec3;
   lines: string[];
+  /** Messwert in m² bzw. m³ für die Summe. */
+  value?: number;
 }
 
 interface Props {

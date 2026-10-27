@@ -6,8 +6,10 @@ IFC-Modelle im Browser ansehen – mit Fokus auf Infrastruktur (IFC 4.3: Brücke
 - Bauteilbaum: Modell → Bauwerk → Teil → IFC-Klasse → Bauteil
 - Bauteil anklicken: Typ, Material, Mengen (Quantity-Sets) und Property-Sets
 - Isolieren, Ausblenden, Alles zeigen
-- Messen: Punkt (Koordinate, bei Georeferenz in Landeskoordinaten), Strecke, Fläche eines
-  Bauteils, Volumen eines Bauteils
+- Messen: Punkt (Koordinate, bei Georeferenz in Landeskoordinaten), Strecke, Fläche einer
+  ganzen Bauteilseite (auch gekrümmt, mehrere mit Summe), Volumen eines Bauteils (Hülle
+  leuchtet auf). Punkte rasten an Eckpunkten, Kanten und Bauteilachsen ein; Alt hält das
+  Einrasten an.
 - Achsenkreuz unten links; Tipp auf Z = Draufsicht
 
 **Die Modelle verlassen den Rechner nicht.** Alles läuft im Browser, es gibt keinen Server

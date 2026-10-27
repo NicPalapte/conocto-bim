@@ -32,13 +32,24 @@ export class MeasureOverlay {
     this.add(id, new THREE.Points(geometry, material));
   }
 
-  addLine(id: string, a: Vec3, b: Vec3): void {
+  /** `dashed`: gestrichelt (Strichlänge folgt der Linienlänge), für die Vorschau. */
+  addLine(id: string, a: Vec3, b: Vec3, dashed = false): void {
     const geometry = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(...a),
       new THREE.Vector3(...b),
     ]);
-    const material = new THREE.LineBasicMaterial({ color: this.color, depthTest: false });
-    this.add(id, new THREE.Line(geometry, material));
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    const material = dashed
+      ? new THREE.LineDashedMaterial({
+          color: this.color,
+          depthTest: false,
+          dashSize: length / 40,
+          gapSize: length / 60,
+        })
+      : new THREE.LineBasicMaterial({ color: this.color, depthTest: false });
+    const line = new THREE.Line(geometry, material);
+    if (dashed) line.computeLineDistances();
+    this.add(id, line);
   }
 
   /** `triangles`: je Dreieck 9 Zahlen in Weltkoordinaten. */
