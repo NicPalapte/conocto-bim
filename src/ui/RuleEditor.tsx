@@ -77,6 +77,14 @@ function distinct(elements: ElementFacts[], k: FactKey): { value: FactValue; cou
   return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 30);
 }
 
+/** Zahl aus Eingabe oder Merkmal; Komma als Dezimalzeichen. */
+function toNumber(v: FactValue | string | undefined): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v !== 'string' || !v.trim()) return null;
+  const n = Number(v.trim().replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
 const show = (v: FactValue) => (typeof v === 'number' ? number.format(v) : v);
 
 /** Auswahlgruppe und Messansatz einer Position bearbeiten, Ergebnis je Bauteil. */
@@ -84,6 +92,7 @@ export function RuleEditor(props: Props) {
   const { rule, unit, categories, candidates, loading, result, picking } = props;
   const { onChange, onPicking, onFocus, onRemove } = props;
   const [keyChoice, setKeyChoice] = useState('');
+  const [range, setRange] = useState({ from: '', to: '' });
   const group = rule.group;
   const current = useMemo(() => members(candidates, group), [candidates, group]);
 
@@ -98,6 +107,10 @@ export function RuleEditor(props: Props) {
   }, [current]);
   const chosen = keys.find((k) => keyId(k) === keyChoice) ?? null;
   const values = chosen ? distinct(current, chosen) : [];
+  // Zahlenwerte des gewählten Merkmals: Grundlage für „von – bis“.
+  const numbers = chosen
+    ? current.map((e) => toNumber(valueOf(e, chosen))).filter((n): n is number => n !== null)
+    : [];
   const numericKeys = keys.filter(
     (k) => k.kind === 'value' && current.some((e) => typeof e.values[k.key] === 'number'),
   );
@@ -110,6 +123,22 @@ export function RuleEditor(props: Props) {
       chosen.kind === 'extent'
         ? extentCriterion(chosen.axis, Number(value))
         : criterionFrom(chosen.key, value);
+    setGroup({ where: [...group.where, c] });
+    setKeyChoice('');
+  };
+  const chooseKey = (id: string) => {
+    setKeyChoice(id);
+    setRange({ from: '', to: '' });
+  };
+  const from = toNumber(range.from) ?? (numbers.length ? Math.min(...numbers) : null);
+  const to = toNumber(range.to) ?? (numbers.length ? Math.max(...numbers) : null);
+  const addRange = () => {
+    if (!chosen || from === null || to === null) return;
+    const [lo, hi] = from <= to ? [from, to] : [to, from];
+    const c: Criterion =
+      chosen.kind === 'extent'
+        ? { kind: 'extent', axis: chosen.axis, from: lo, to: hi }
+        : { kind: 'range', key: chosen.key, from: lo, to: hi };
     setGroup({ where: [...group.where, c] });
     setKeyChoice('');
   };
@@ -176,7 +205,7 @@ export function RuleEditor(props: Props) {
       {current.length > 0 && (
         <div className="rule-field">
           <span className="k">Eingrenzen</span>
-          <select value={keyChoice} onChange={(e) => setKeyChoice(e.target.value)}>
+          <select value={keyChoice} onChange={(e) => chooseKey(e.target.value)}>
             <option value="">Merkmal wählen …</option>
             {keys.map((k) => (
               <option key={keyId(k)} value={keyId(k)}>
@@ -200,6 +229,37 @@ export function RuleEditor(props: Props) {
               {chosen.kind === 'extent' ? ' m' : ''} <span className="sub">{v.count}</span>
             </button>
           ))}
+        </div>
+      )}
+      {chosen && numbers.length > 0 && (
+        <div className="range">
+          <input
+            type="text"
+            inputMode="decimal"
+            aria-label="von"
+            placeholder={number.format(Math.min(...numbers))}
+            value={range.from}
+            onChange={(e) => setRange({ ...range, from: e.target.value })}
+          />
+          <span className="sub">bis</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            aria-label="bis"
+            placeholder={number.format(Math.max(...numbers))}
+            value={range.to}
+            onChange={(e) => setRange({ ...range, to: e.target.value })}
+            onKeyDown={(e) => e.key === 'Enter' && addRange()}
+          />
+          {chosen.kind === 'extent' && <span className="sub">m</span>}
+          <button
+            type="button"
+            className="btn"
+            disabled={from === null || to === null}
+            onClick={addRange}
+          >
+            Eingrenzen
+          </button>
         </div>
       )}
 
