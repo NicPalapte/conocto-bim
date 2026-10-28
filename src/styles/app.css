@@ -326,6 +326,7 @@ input {
 }
 
 .toolbar .btn.active,
+.rule-actions .btn.active,
 .check-foot .btn.active {
   background: var(--blueS);
   color: var(--blueD);
@@ -778,4 +779,170 @@ input {
   display: flex;
   justify-content: center;
   gap: 8px;
+}
+
+.check-card {
+  overflow-y: auto;
+}
+
+/* Mengenregel in der Positionskarte: Gruppe, Kriterien, Ansatz, Bauteile. */
+.rule {
+  border-top: 1px solid var(--grid);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: var(--fs-row);
+}
+
+.rule-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rule-head .sub {
+  flex: 1;
+}
+
+.rule-field {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.rule-field .k {
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.rule select {
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line2);
+  background: var(--sunken);
+  color: var(--ink);
+  font-size: var(--fs-row);
+}
+
+.criteria {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.criteria li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 4px 3px 10px;
+  border-radius: var(--r-sm);
+  background: var(--blueS);
+  color: var(--blueD);
+}
+
+.value-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-row);
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--sunken);
+}
+
+.rule-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rule-rows {
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--grid);
+  border-radius: var(--r-sm);
+}
+
+.rule-row {
+  display: flex;
+  gap: 8px;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: var(--fs-row);
+  cursor: pointer;
+}
+
+.rule-row:hover {
+  background: var(--sunken);
+}
+
+.rule-row .text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-row .qty {
+  flex: none;
+  color: var(--dim);
+}
+
+.rule-row.none .qty,
+.rule-rows .missing {
+  color: var(--amber);
+}
+
+.rule-rows .missing {
+  padding: 6px 10px;
+  background: var(--amberS);
+  font-size: var(--fs-label);
+}
+
+.lv-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lv-actions .sub {
+  flex: 1;
+  font-size: var(--fs-label);
+  color: var(--mute);
+}
+
+.lv-actions .icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Position mit Mengenregel: Punkt in Akzentfarbe vor der OZ. */
+.lv-row.ruled .oz::before {
+  content: '●';
+  margin-right: 4px;
+  color: var(--blue);
 }

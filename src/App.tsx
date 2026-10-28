@@ -8,12 +8,23 @@ import {
 } from './core';
 import type { Vec3 } from './model/bounds';
 import { dimensionOf, listPositions, type Dimension, type LoadedLv } from './model/lv';
+import {
+  applyRule,
+  defaultTakeoff,
+  emptyGroup,
+  members,
+  parseLinksFile,
+  toLinksFile,
+  type ElementFacts,
+  type Rule,
+} from './model/takeoff';
 import { formatArea, formatCoordinate, formatLength, formatVolume, segment } from './model/measure';
 import type { ElementProps } from './model/properties';
 import {
   buildTree,
   filterTree,
   findPath,
+  idsByCategory,
   placementOf,
   type ItemLabel,
   type Placement,
@@ -25,6 +36,7 @@ import { MeasureLabels, type MeasureMode, type Measurement } from './ui/MeasureL
 import { TreeLevel } from './ui/ModelTree';
 import { LvList } from './ui/LvList';
 import { PositionCard } from './ui/PositionCard';
+import { RuleEditor } from './ui/RuleEditor';
 import { PropertiesPanel, type GroupInfo } from './ui/PropertiesPanel';
 import {
   BimEngine,
@@ -61,6 +73,12 @@ interface Selection {
 }
 
 const NO_PLACEMENT: Placement = { facility: null, part: null };
+
+function amberColor(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue('--amber').trim() || '#b36200';
+}
+
+const factKey = (modelId: string, localId: number) => `${modelId}#${localId}`;
 
 function accentColor(): string {
   return getComputedStyle(document.documentElement).getPropertyValue('--blue').trim() || '#c8362b';
@@ -121,6 +139,13 @@ export function App() {
   const lvInput = useRef<HTMLInputElement>(null);
   const [lv, setLv] = useState<LoadedLv | null>(null);
   const [positionId, setPositionId] = useState<string | null>(null);
+  // Mengenregeln je Position (Fingerabdruck) und was der Viewer über Bauteile weiß.
+  const [rules, setRules] = useState<Record<string, Rule>>({});
+  const [facts, setFacts] = useState<Map<string, ElementFacts>>(new Map());
+  const factsRequested = useRef(new Set<string>());
+  const [factsLoading, setFactsLoading] = useState(0);
+  const [picking, setPicking] = useState(false);
+  const rulesInput = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<MeasureMode | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [pending, setPending] = useState<{ point: Vec3; axes: ElementAxes | null } | null>(null);
@@ -146,12 +171,6 @@ export function App() {
       stop?.();
     };
   }, [engine]);
-
-  // Auswahl → Hervorhebung im Modell.
-  useEffect(() => {
-    const items = selection ? { [selection.modelId]: new Set(selection.ids) } : null;
-    void engine.highlight(items, accentColor());
-  }, [engine, selection]);
 
   // Eigenschaften nur für ein einzelnes Bauteil lesen.
   useEffect(() => {
@@ -407,37 +426,6 @@ export function App() {
     [engine],
   );
 
-  // Klick (ohne Ziehen) in der 3D-Ansicht wählt ein Bauteil oder misst.
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    let down: { x: number; y: number } | null = null;
-    const onDown = (e: PointerEvent) => {
-      down = { x: e.clientX, y: e.clientY };
-      setHover(null);
-    };
-    const onUp = async (e: PointerEvent) => {
-      if (!down || e.button !== 0) return;
-      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
-      down = null;
-      if (moved > 4 || models.length === 0) return;
-      if (mode) {
-        const snap = snaps(mode)
-          ? await engine.snap(e, pending, e.altKey)
-          : await engine.snap(e, null, true);
-        if (snap) await measure(snap);
-        return;
-      }
-      selectElement(await engine.pick(e));
-    };
-    stage.addEventListener('pointerdown', onDown);
-    stage.addEventListener('pointerup', onUp);
-    return () => {
-      stage.removeEventListener('pointerdown', onDown);
-      stage.removeEventListener('pointerup', onUp);
-    };
-  }, [engine, models.length, selectElement, mode, pending, measure]);
-
   // Beim Messen zeigt eine Marke unter dem Zeiger, wo der Punkt einrastet. Immer nur eine
   // Abfrage gleichzeitig; Bewegungen dazwischen zählen nur mit ihrer letzten Position.
   useEffect(() => {
@@ -489,7 +477,8 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (pending) {
+      if (picking) setPicking(false);
+      else if (pending) {
         engine.removeDrawing('pending');
         engine.drawPreview(null, null);
         setPending(null);
@@ -498,7 +487,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [engine, mode, pending]);
+  }, [engine, mode, pending, picking]);
 
   const toggle = useCallback((key: string) => {
     setExpanded((e) => {
@@ -574,15 +563,199 @@ export function App() {
     };
   }, [mode, measurements]);
   const position = lv?.positions.find((p) => p.id === positionId) ?? null;
+  const rule = position ? (rules[position.id] ?? null) : null;
+  const ruleCategory = rule?.group.category ?? null;
+
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of models) {
+      for (const [category, ids] of idsByCategory(m.tree)) {
+        counts.set(category, (counts.get(category) ?? 0) + ids.size);
+      }
+    }
+    return [...counts]
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => a.category.localeCompare(b.category));
+  }, [models]);
+
+  const loadFacts = useCallback(
+    async (modelId: string, ids: number[]) => {
+      if (!ids.length) return;
+      setFactsLoading((n) => n + 1);
+      try {
+        const loaded = await engine.elementFacts(modelId, ids);
+        setFacts((prev) => {
+          const next = new Map(prev);
+          for (const f of loaded) next.set(factKey(f.modelId, f.localId), f);
+          return next;
+        });
+      } catch (err) {
+        console.error(err);
+        setError('Bauteildaten konnten nicht gelesen werden.');
+      } finally {
+        setFactsLoading((n) => n - 1);
+      }
+    },
+    [engine],
+  );
+
+  // Bauteildaten der gewählten Klasse einmal je Modell laden.
+  useEffect(() => {
+    if (!ruleCategory) return;
+    for (const m of models) {
+      const key = `${m.id}|${ruleCategory}`;
+      if (factsRequested.current.has(key)) continue;
+      factsRequested.current.add(key);
+      void loadFacts(m.id, [...(idsByCategory(m.tree).get(ruleCategory) ?? [])]);
+    }
+  }, [models, ruleCategory, loadFacts]);
+
+  const candidates = useMemo(() => {
+    if (!rule) return [];
+    const add = new Set(rule.group.add);
+    return [...facts.values()].filter(
+      (f) => (ruleCategory !== null && f.category === ruleCategory) || add.has(f.guid),
+    );
+  }, [facts, rule, ruleCategory]);
+  const result = useMemo(() => (rule ? applyRule(candidates, rule) : null), [candidates, rule]);
+
+  // Hervorhebung: Auswahl, sonst die Bauteile der Mengenregel (ohne Wert amber).
+  useEffect(() => {
+    if (selection) {
+      void engine.highlight({ [selection.modelId]: new Set(selection.ids) }, accentColor());
+      return;
+    }
+    if (!result?.rows.length) {
+      void engine.highlight(null, accentColor());
+      return;
+    }
+    const valued: Record<string, Set<number>> = {};
+    const missing: Record<string, Set<number>> = {};
+    for (const { element, quantity } of result.rows) {
+      const target = quantity === null ? missing : valued;
+      (target[element.modelId] ??= new Set()).add(element.localId);
+    }
+    void engine.highlightGroups([
+      { items: valued, color: accentColor() },
+      { items: missing, color: amberColor() },
+    ]);
+  }, [engine, selection, result]);
+
+  const setRule = useCallback(
+    (next: Rule) => setRules((r) => ({ ...r, [next.position]: next })),
+    [],
+  );
+
+  // Im Modell antippen: Bauteil zur Gruppe dazu oder heraus.
+  const togglePick = useCallback(
+    async (hit: Pick) => {
+      if (!rule) return;
+      const key = factKey(hit.modelId, hit.localId);
+      let element = facts.get(key);
+      if (!element) {
+        const [loaded] = await engine.elementFacts(hit.modelId, [hit.localId]);
+        if (!loaded) return;
+        element = loaded;
+        setFacts((prev) => new Map(prev).set(key, loaded));
+      }
+      const { guid } = element;
+      const group = rule.group;
+      const isMember = members([element], group).length > 0;
+      const without = (list: string[]) => list.filter((g) => g !== guid);
+      setRule({
+        ...rule,
+        group: isMember
+          ? group.add.includes(guid)
+            ? { ...group, add: without(group.add) }
+            : { ...group, remove: [...group.remove, guid] }
+          : group.remove.includes(guid)
+            ? { ...group, remove: without(group.remove) }
+            : { ...group, add: [...group.add, guid] },
+      });
+    },
+    [engine, facts, rule, setRule],
+  );
+
+  // Klick (ohne Ziehen) in der 3D-Ansicht wählt ein Bauteil oder misst.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    let down: { x: number; y: number } | null = null;
+    const onDown = (e: PointerEvent) => {
+      down = { x: e.clientX, y: e.clientY };
+      setHover(null);
+    };
+    const onUp = async (e: PointerEvent) => {
+      if (!down || e.button !== 0) return;
+      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+      down = null;
+      if (moved > 4 || models.length === 0) return;
+      if (mode) {
+        const snap = snaps(mode)
+          ? await engine.snap(e, pending, e.altKey)
+          : await engine.snap(e, null, true);
+        if (snap) await measure(snap);
+        return;
+      }
+      const hit = await engine.pick(e);
+      if (picking) {
+        if (hit) await togglePick(hit);
+        return;
+      }
+      selectElement(hit);
+    };
+    stage.addEventListener('pointerdown', onDown);
+    stage.addEventListener('pointerup', onUp);
+    return () => {
+      stage.removeEventListener('pointerdown', onDown);
+      stage.removeEventListener('pointerup', onUp);
+    };
+  }, [engine, models.length, selectElement, mode, pending, measure, picking, togglePick]);
+
   const measured = useMemo(() => {
+    if (result && rule)
+      return { sum: result.sum, count: result.rows.length, from: 'rule' as const };
     const dimension = position ? dimensionOf(position.unit) : null;
     if (!dimension) return null;
     const values = measurements.filter(
       (m) => m.kind === MODE_OF[dimension] && m.value !== undefined,
     );
     if (!values.length) return null;
-    return { sum: values.reduce((n, m) => n + (m.value ?? 0), 0), count: values.length };
-  }, [position, measurements]);
+    return {
+      sum: values.reduce((n, m) => n + (m.value ?? 0), 0),
+      count: values.length,
+      from: 'measure' as const,
+    };
+  }, [position, measurements, result, rule]);
+
+  const saveRules = () => {
+    if (!lv) return;
+    const file = toLinksFile({ fileId: lv.fileId, name: lv.name }, Object.values(rules));
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }),
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${lv.name.replace(/\.[^.]+$/, '')}.mengen.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const loadRules = async (file: File) => {
+    try {
+      const data = parseLinksFile(await file.text());
+      setRules((r) => ({
+        ...r,
+        ...Object.fromEntries(data.rules.map((x) => [x.position, x])),
+      }));
+      if (lv && data.lv.fileId !== lv.fileId) {
+        setError(`Die Regeln stammen aus „${data.lv.name}“, einer anderen LV-Datei.`);
+      }
+    } catch {
+      setError(`${file.name} ist keine Regeldatei von Conocto BIM.`);
+    }
+  };
+
   const totalElements = models.reduce((n, m) => n + m.elementCount, 0);
 
   return (
@@ -600,6 +773,17 @@ export function App() {
           {totalElements.toLocaleString('de-DE')} Bauteile
           {lv ? ` · LV ${lv.positions.length.toLocaleString('de-DE')} Positionen` : ''} · nur lokal
         </span>
+        <input
+          ref={rulesInput}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) void loadRules(file);
+          }}
+        />
         <input
           ref={lvInput}
           type="file"
@@ -713,6 +897,9 @@ export function App() {
             <LvList
               lv={lv}
               selectedId={positionId}
+              ruled={new Set(Object.keys(rules))}
+              onSaveRules={Object.keys(rules).length ? saveRules : null}
+              onLoadRules={() => rulesInput.current?.click()}
               onSelect={(id) => {
                 setPositionId(id);
                 setSelection(null);
@@ -804,12 +991,45 @@ export function App() {
         <PositionCard
           position={position}
           measured={measured}
+          rule={
+            rule && result ? (
+              <RuleEditor
+                rule={rule}
+                unit={position.unit}
+                categories={categories}
+                candidates={candidates}
+                loading={factsLoading > 0}
+                result={result}
+                picking={picking}
+                onChange={setRule}
+                onPicking={(on) => {
+                  setPicking(on);
+                  if (on) startMode(null);
+                }}
+                onFocus={(e) => void engine.fit({ [e.modelId]: new Set([e.localId]) })}
+                onRemove={() => {
+                  setPicking(false);
+                  setRules(({ [rule.position]: _, ...rest }) => rest);
+                }}
+              />
+            ) : null
+          }
+          onCreateRule={() =>
+            setRule({
+              position: position.id,
+              group: emptyGroup(),
+              takeoff: defaultTakeoff(dimensionOf(position.unit), position.unit),
+            })
+          }
           measuring={(() => {
             const dimension = dimensionOf(position.unit);
             return dimension !== null && mode === MODE_OF[dimension];
           })()}
           onMeasure={(dimension) => startMode(MODE_OF[dimension])}
-          onClose={() => setPositionId(null)}
+          onClose={() => {
+            setPicking(false);
+            setPositionId(null);
+          }}
         />
       )}
 
@@ -860,14 +1080,16 @@ export function App() {
       )}
 
       {models.length > 0 && (
-        <div className={`hint float${mode ? ' measuring' : ''}`}>
+        <div className={`hint float${mode || picking ? ' measuring' : ''}`}>
           {mode
             ? [
                 pending ? 'Endpunkt antippen' : MODES.find((m) => m.mode === mode)?.hint,
                 ...(snaps(mode) ? [hover ? snapLabel(hover) : 'Alt = ohne Einrasten'] : []),
                 'Esc beendet',
               ].join(' · ')
-            : 'Ziehen dreht · Rad zoomt · Klick wählt · Doppelklick im Baum zoomt'}
+            : picking
+              ? 'Bauteil antippen: zur Gruppe dazu oder heraus · Esc beendet'
+              : 'Ziehen dreht · Rad zoomt · Klick wählt · Doppelklick im Baum zoomt'}
         </div>
       )}
 

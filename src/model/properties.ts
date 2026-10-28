@@ -179,3 +179,61 @@ export function definitionIds(item: RawItem): number[] {
     .map((d) => Number(attr(d, '_localId')))
     .filter((n) => Number.isFinite(n));
 }
+
+/** Rohwert eines Merkmals für Filter: Zahl, wenn möglich, sonst Text. */
+export type FactValue = number | string;
+
+function rawValue(value: unknown): FactValue | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
+  const s = String(value);
+  return BOOLEAN[s] ?? s;
+}
+
+/**
+ * Alle Merkmale und Mengen eines Bauteils als `Set · Name` → Rohwert, für Auswahlgruppen.
+ * Gleiche Auflösung wie `buildElementProps` (Exemplar vor Typ), aber ohne Formatierung.
+ */
+export function elementValues(item: RawItem, definitions: RawItem[]): Record<string, FactValue> {
+  const byId = new Map<number, RawItem>();
+  for (const d of definitions) byId.set(Number(attr(d, '_localId')), d);
+  const full = (d: RawItem) => byId.get(Number(attr(d, '_localId'))) ?? d;
+  const defined = rel(item, 'IsDefinedBy').map(full);
+  const typeObj = defined.find((d) => categoryOf(d).endsWith('TYPE')) ?? null;
+  const sets = [
+    ...defined.filter((d) => !categoryOf(d).endsWith('TYPE')),
+    ...(typeObj ? rel(typeObj, 'HasPropertySets').map(full) : []),
+  ];
+  const values: Record<string, FactValue> = {};
+  const put = (key: string, value: unknown) => {
+    const v = rawValue(value);
+    if (v !== null && !(key in values)) values[key] = v;
+  };
+  for (const set of sets) {
+    const title = text(attr(set, 'Name')) ?? categoryOf(set);
+    for (const q of rel(set, 'Quantities')) {
+      const spec = QUANTITY_VALUE[categoryOf(q)];
+      if (spec) put(`${title} · ${String(attr(q, 'Name') ?? spec[0])}`, attr(q, spec[0]));
+    }
+    for (const p of rel(set, 'HasProperties')) {
+      const name = text(attr(p, 'Name'));
+      if (name) put(`${title} · ${name}`, attr(p, 'NominalValue'));
+    }
+  }
+  const materials = rel(item, 'HasAssociations')
+    .map(full)
+    .map(materialName)
+    .filter((m): m is string => Boolean(m));
+  if (materials.length) put('Material', [...new Set(materials)].join(', '));
+  if (typeObj) put('Typ', attr(typeObj, 'Name'));
+  for (const [label, key] of [
+    ['Objekttyp', 'ObjectType'],
+    ['Vordefinierter Typ', 'PredefinedType'],
+    ['Kennung', 'Tag'],
+  ] as const) {
+    const v = attr(item, key);
+    if (v !== 'NOTDEFINED') put(label, v);
+  }
+  return values;
+}
