@@ -325,7 +325,8 @@ input {
   background: var(--sunken);
 }
 
-.toolbar .btn.active {
+.toolbar .btn.active,
+.check-foot .btn.active {
   background: var(--blueS);
   color: var(--blueD);
 }
@@ -634,4 +635,147 @@ input {
 
 .snap-marker.kind-axis {
   border-radius: 50%;
+}
+
+/* Linke Leiste: Modelle und LV teilen sich die Höhe. */
+.panel-left .section {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-left .section + .section {
+  border-top: 1px solid var(--line);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-row);
+  font-weight: var(--fw-semi);
+}
+
+/* LV-Zeile: OZ · Kurztext · Menge, Auswahl wie im Baum. */
+.lv-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  border-left: var(--sel-bar) solid transparent;
+  background: transparent;
+  padding: 5px 12px;
+  font-size: var(--fs-row);
+  text-align: left;
+  cursor: pointer;
+}
+
+.lv-row:hover {
+  background: var(--sunken);
+}
+
+.lv-row.selected {
+  background: var(--blueS);
+  border-left-color: var(--blue);
+  color: var(--blueD);
+}
+
+.lv-row .oz {
+  flex: none;
+  color: var(--mute);
+}
+
+.lv-row .text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lv-row .qty {
+  flex: none;
+  color: var(--dim);
+}
+
+.lv-more {
+  padding: 8px 12px;
+  font-size: var(--fs-label);
+  color: var(--mute);
+}
+
+/* Prüfkarte der gewählten Position: so hoch wie ihr Inhalt. */
+.check-card {
+  bottom: auto;
+  max-height: calc(100% - var(--h-topbar) - 48px);
+}
+
+.check-card h2 .oz {
+  color: var(--mute);
+  font-weight: var(--fw-regular, 400);
+}
+
+.check-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  padding: 12px 16px;
+  font-size: var(--fs-cell);
+}
+
+.check-grid .k {
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--mute);
+  align-self: center;
+}
+
+.check-grid .v {
+  font-weight: var(--fw-semi);
+}
+
+.check-card .sub {
+  color: var(--mute);
+  font-weight: normal;
+  font-size: var(--fs-row);
+}
+
+.check-foot {
+  padding: 0 16px 14px;
+}
+
+.longtext {
+  border-top: 1px solid var(--grid);
+  padding: 10px 16px;
+  overflow: auto;
+  font-size: var(--fs-row);
+}
+
+.longtext summary {
+  cursor: pointer;
+  color: var(--dim);
+}
+
+.longtext p {
+  margin: 8px 0 0;
+  font-size: var(--fs-prose);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
 }

@@ -11,8 +11,10 @@ IFC-Modelle im Browser ansehen – mit Fokus auf Infrastruktur (IFC 4.3: Brücke
   leuchtet auf). Punkte rasten an Eckpunkten, Kanten und Bauteilachsen ein; Alt hält das
   Einrasten an.
 - Achsenkreuz unten links; Tipp auf Z = Draufsicht
+- LV laden (GAEB X83/X84/X86) und Mengen prüfen: Position wählen, am Modell messen, die
+  Karte zeigt LV-Menge, Messsumme und Differenz. Fingerabdrücke wie in Conocto Doc.
 
-**Die Modelle verlassen den Rechner nicht.** Alles läuft im Browser, es gibt keinen Server
+**Modelle und LV verlassen den Rechner nicht.** Alles läuft im Browser, es gibt keinen Server
 und keinen Upload.
 
 Teil von [Conocto](https://github.com/NicPalapte/bubbleLV).
