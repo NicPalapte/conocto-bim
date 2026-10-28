@@ -141,3 +141,27 @@ export function formatVolume(v: number): string {
 export function formatCoordinate(v: number): string {
   return m3.format(v);
 }
+
+/** Was eine Messung belegt: Dreiecke einer Bauteilseite oder ein ganzes Bauteil. */
+export function partKeys(element: string, triangles?: number[]): string[] {
+  return triangles ? triangles.map((t) => `${element}#${t}`) : [element];
+}
+
+/**
+ * Schutz vor doppeltem Messen: Dieselbe Seite bzw. dasselbe Bauteil noch einmal antippen
+ * nimmt die Messung heraus; sonst zählt nur, was noch nicht gemessen ist.
+ */
+export function dedupe(
+  existing: { id: string; parts?: string[] }[],
+  parts: string[],
+): { remove: string } | { fresh: string[] } {
+  const taken = new Set<string>();
+  for (const m of existing) {
+    if (!m.parts) continue;
+    const own = new Set(m.parts);
+    const shared = parts.filter((p) => own.has(p)).length;
+    if (shared * 2 >= parts.length && shared * 2 >= own.size) return { remove: m.id };
+    for (const p of own) taken.add(p);
+  }
+  return { fresh: parts.filter((p) => !taken.has(p)) };
+}

@@ -10,6 +10,8 @@ export interface Measurement {
   lines: string[];
   /** Messwert in m² bzw. m³ für die Summe. */
   value?: number;
+  /** Belegte Dreiecke bzw. Bauteil, gegen doppeltes Messen. */
+  parts?: string[];
 }
 
 interface Props {

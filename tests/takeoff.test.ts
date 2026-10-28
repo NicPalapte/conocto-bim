@@ -96,3 +96,13 @@ describe('Regeldatei', () => {
     expect(() => parseLinksFile('{"schema":"x"}')).toThrow();
   });
 });
+
+describe('Bereich von Hand', () => {
+  it('grenzt Länge entlang der Achse von–bis ein, Grenzen eingeschlossen', () => {
+    const group = {
+      ...emptyGroup('IFCPILE'),
+      where: [{ kind: 'extent' as const, axis: 'z' as const, from: 12, to: 14.998 }],
+    };
+    expect(members(elements, group).map((e) => e.guid)).toEqual(['p2', 'p3']);
+  });
+});

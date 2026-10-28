@@ -855,6 +855,27 @@ input {
   gap: 6px;
 }
 
+.range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.range input {
+  width: 72px;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line2);
+  background: var(--sunken);
+  font-size: var(--fs-row);
+}
+
+.range input:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: -1px;
+}
+
 .chip {
   padding: 4px 10px;
   border-radius: var(--r-pill);

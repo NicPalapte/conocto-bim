@@ -8,13 +8,14 @@ IFC-Modelle im Browser ansehen – mit Fokus auf Infrastruktur (IFC 4.3: Brücke
 - Isolieren, Ausblenden, Alles zeigen
 - Messen: Punkt (Koordinate, bei Georeferenz in Landeskoordinaten), Strecke, Fläche einer
   ganzen Bauteilseite (auch gekrümmt, mehrere mit Summe), Volumen eines Bauteils (Hülle
-  leuchtet auf). Punkte rasten an Eckpunkten, Kanten und Bauteilachsen ein; Alt hält das
+  leuchtet auf). Nichts zählt doppelt: dieselbe Seite oder dasselbe Bauteil noch einmal
+  antippen nimmt die Messung heraus, überlappende Flächen zählen nur neu. Punkte rasten an Eckpunkten, Kanten und Bauteilachsen ein; Alt hält das
   Einrasten an.
 - Achsenkreuz unten links; Tipp auf Z = Draufsicht
 - LV laden (GAEB X83/X84/X86) und Mengen prüfen: Position wählen, am Modell messen, die
   Karte zeigt LV-Menge, Messsumme und Differenz. Fingerabdrücke wie in Conocto Doc.
 - Mengenregeln je Position: Bauteilgruppe (Klasse, Merkmale, Maße entlang der Bauteilachsen,
-  von Hand dazu/heraus) und Menge (Volumen, Länge, Anzahl oder Wert aus dem Modell). Bauteile
+  Bereich von–bis von Hand, Bauteile von Hand dazu/heraus) und Menge (Volumen, Länge, Anzahl oder Wert aus dem Modell). Bauteile
   der Gruppe leuchten, Bauteile ohne Wert amber. Regeln als Datei sichern und laden.
 
 **Modelle und LV verlassen den Rechner nicht.** Alles läuft im Browser, es gibt keinen Server

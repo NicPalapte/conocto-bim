@@ -18,7 +18,15 @@ import {
   type ElementFacts,
   type Rule,
 } from './model/takeoff';
-import { formatArea, formatCoordinate, formatLength, formatVolume, segment } from './model/measure';
+import {
+  dedupe,
+  formatArea,
+  formatCoordinate,
+  formatLength,
+  formatVolume,
+  partKeys,
+  segment,
+} from './model/measure';
 import type { ElementProps } from './model/properties';
 import {
   buildTree,
@@ -148,6 +156,9 @@ export function App() {
   const rulesInput = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<MeasureMode | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
+  // Messen läuft asynchron; der Abgleich braucht den Stand zum Zeitpunkt des Antippens.
+  const measurementsRef = useRef(measurements);
+  measurementsRef.current = measurements;
   const [pending, setPending] = useState<{ point: Vec3; axes: ElementAxes | null } | null>(null);
   const [hover, setHover] = useState<Snap | null>(null);
   const [axes, setAxes] = useState<ViewAxes | null>(null);
@@ -315,6 +326,14 @@ export function App() {
     [models],
   );
 
+  const removeMeasurement = useCallback(
+    (id: string) => {
+      engine.removeDrawing(id);
+      setMeasurements((list) => list.filter((m) => m.id !== id));
+    },
+    [engine],
+  );
+
   const measure = useCallback(
     async (snap: Snap) => {
       if (!mode) return;
@@ -370,15 +389,36 @@ export function App() {
         return;
       }
       if (!snap.pick) return;
+      const element = `${snap.pick.modelId}#${snap.pick.localId}`;
       if (mode === 'area') {
-        const area = await engine.measureFace(id, { ...snap.pick, point });
-        if (area === null) {
+        const face = await engine.faceAt({ ...snap.pick, point });
+        if (!face) {
           setError('Hier wurde keine Bauteilfläche gefunden.');
           return;
         }
-        add({ anchor: point, lines: [formatArea(area), 'Bauteilseite'], value: area });
+        const parts = partKeys(element, face);
+        const check = dedupe(measurementsRef.current, parts);
+        if ('remove' in check) return removeMeasurement(check.remove);
+        if (!check.fresh.length) {
+          setError('Diese Fläche ist schon gemessen.');
+          return;
+        }
+        const fresh = new Set(check.fresh);
+        const kept = face.filter((_, i) => fresh.has(parts[i]));
+        const area = await engine.drawFace(id, snap.pick, kept);
+        add({
+          anchor: point,
+          value: area,
+          parts: check.fresh,
+          lines: [
+            formatArea(area),
+            kept.length < face.length ? 'Bauteilseite ohne schon Gemessenes' : 'Bauteilseite',
+          ],
+        });
         return;
       }
+      const check = dedupe(measurementsRef.current, [element]);
+      if ('remove' in check) return removeMeasurement(check.remove);
       const volume = await engine.volume(snap.pick);
       const props = await engine.readProperties(snap.pick).catch(() => null);
       const fromModel = props?.groups
@@ -389,6 +429,7 @@ export function App() {
       add({
         anchor: point,
         value: volume,
+        parts: [element],
         lines: [
           formatVolume(volume),
           props?.name ?? 'Bauteil',
@@ -396,15 +437,7 @@ export function App() {
         ],
       });
     },
-    [engine, mode, pending],
-  );
-
-  const removeMeasurement = useCallback(
-    (id: string) => {
-      engine.removeDrawing(id);
-      setMeasurements((list) => list.filter((m) => m.id !== id));
-    },
-    [engine],
+    [engine, mode, pending, removeMeasurement],
   );
 
   const clearMeasurements = useCallback(() => {

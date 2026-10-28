@@ -13,7 +13,7 @@ import {
 import { coreBounds, type Bounds, type Vec3 } from '../model/bounds';
 import type { ElementFacts } from '../model/takeoff';
 import { parseMapConversion, toMap, type MapConversion } from '../model/georef';
-import { surfaceAt } from '../model/measure';
+import { surfaceAt, triangleNormal } from '../model/measure';
 import {
   along,
   closestOnLineToRay,
@@ -312,14 +312,20 @@ export class BimEngine {
     return surface;
   }
 
-  /** Bauteilseite am getroffenen Punkt (auch gekrümmt); zeichnet sie unter `id` ein. */
-  async measureFace(id: string, pick: SurfacePick): Promise<number | null> {
+  /** Dreiecke der Bauteilseite am getroffenen Punkt (auch gekrümmt). */
+  async faceAt(pick: SurfacePick): Promise<number[] | null> {
     const { triangles } = await this.geometry(pick);
-    const face = surfaceAt(triangles, pick.point);
-    if (!face) return null;
-    const picked = face.triangles.flatMap((t) => triangles.slice(t * 9, t * 9 + 9));
-    this.overlay.addFace(id, picked);
-    return face.area;
+    return surfaceAt(triangles, pick.point)?.triangles ?? null;
+  }
+
+  /** Dreiecke eines Bauteils unter `id` einzeichnen; liefert ihre Fläche in m². */
+  async drawFace(id: string, pick: Pick, picked: number[]): Promise<number> {
+    const { triangles } = await this.geometry(pick);
+    this.overlay.addFace(
+      id,
+      picked.flatMap((t) => triangles.slice(t * 9, t * 9 + 9)),
+    );
+    return picked.reduce((sum, t) => sum + triangleNormal(triangles, t).area, 0);
   }
 
   /** Volumen eines Bauteils aus der Geometrie, in m³. */
