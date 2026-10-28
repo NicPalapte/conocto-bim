@@ -12,6 +12,10 @@
   `packages/core`, dann `node scripts/sync-core.mjs <bubbleLV-Pfad>`. `tests/core.test.ts`
   hält die Fingerabdrücke gleich mit Conocto Doc. Kein eigener GAEB-Parser.
 - LV wird nicht gespeichert; immer nur ein LV geladen.
+- Mengenregeln (`src/model/takeoff.ts`): Auswahlgruppe als Kriterien + GlobalIds dazu/heraus,
+  Messansatz relativ zum Bauteil; Datei `conocto-bim-links-v1` nur mit Schlüsseln (Fingerabdruck,
+  GlobalId), nie LV-Text oder Modelldaten. Rein geometrisch, keine Abrechnungsregeln ohne Owner.
+  Logik bleibt rein (ohne 3D/React), damit sie später in den Kern umziehen kann.
 - Fachlogik ohne 3D in `src/model/` als reine Funktionen mit Vitest-Tests (`tests/`).
 - `web-ifc` exakt auf die Version pinnen, die `@thatopen/fragments` erwartet
   (sonst „StreamMeshes called with 4 arguments“).

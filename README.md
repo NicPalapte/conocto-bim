@@ -13,6 +13,9 @@ IFC-Modelle im Browser ansehen – mit Fokus auf Infrastruktur (IFC 4.3: Brücke
 - Achsenkreuz unten links; Tipp auf Z = Draufsicht
 - LV laden (GAEB X83/X84/X86) und Mengen prüfen: Position wählen, am Modell messen, die
   Karte zeigt LV-Menge, Messsumme und Differenz. Fingerabdrücke wie in Conocto Doc.
+- Mengenregeln je Position: Bauteilgruppe (Klasse, Merkmale, Maße entlang der Bauteilachsen,
+  von Hand dazu/heraus) und Menge (Volumen, Länge, Anzahl oder Wert aus dem Modell). Bauteile
+  der Gruppe leuchten, Bauteile ohne Wert amber. Regeln als Datei sichern und laden.
 
 **Modelle und LV verlassen den Rechner nicht.** Alles läuft im Browser, es gibt keinen Server
 und keinen Upload.

@@ -262,3 +262,16 @@ export function filterTree(
     });
   return walk(nodes);
 }
+
+/** Bauteil-Ids je IFC-Klasse aus den Klassen-Knoten des Baums (für Auswahlgruppen). */
+export function idsByCategory(nodes: TreeNode[], into = new Map<string, Set<number>>()) {
+  for (const n of nodes) {
+    if (n.kind === 'class') {
+      const set = into.get(n.category) ?? new Set<number>();
+      for (const id of n.elementIds) set.add(id);
+      into.set(n.category, set);
+    }
+    idsByCategory(n.children, into);
+  }
+  return into;
+}

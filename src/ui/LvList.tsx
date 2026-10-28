@@ -8,12 +8,18 @@ const MAX_ROWS = 300;
 interface Props {
   lv: LoadedLv;
   selectedId: string | null;
+  /** Positionen mit Mengenregel. */
+  ruled: Set<string>;
+  /** `null`, solange es nichts zu sichern gibt. */
+  onSaveRules: (() => void) | null;
+  onLoadRules: () => void;
   onSelect: (id: string) => void;
   onRemove: () => void;
 }
 
 /** Positionsliste des geladenen LV mit eigener Suche (OZ, Kurztext). */
-export function LvList({ lv, selectedId, onSelect, onRemove }: Props) {
+export function LvList(props: Props) {
+  const { lv, selectedId, ruled, onSaveRules, onLoadRules, onSelect, onRemove } = props;
   const [query, setQuery] = useState('');
   const matches = useMemo(() => matchPositions(lv.positions, query), [lv, query]);
   const shown = matches.slice(0, MAX_ROWS);
@@ -27,6 +33,20 @@ export function LvList({ lv, selectedId, onSelect, onRemove }: Props) {
           </span>
           <button type="button" className="icon-btn" aria-label="LV schließen" onClick={onRemove}>
             ✕
+          </button>
+        </div>
+        <div className="lv-actions">
+          <span className="sub">Mengenregeln</span>
+          <button type="button" className="icon-btn" onClick={onLoadRules}>
+            Laden
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            disabled={!onSaveRules}
+            onClick={() => onSaveRules?.()}
+          >
+            Sichern
           </button>
         </div>
         <input
@@ -44,7 +64,7 @@ export function LvList({ lv, selectedId, onSelect, onRemove }: Props) {
             key={p.id}
             type="button"
             role="listitem"
-            className={`lv-row${p.id === selectedId ? ' selected' : ''}`}
+            className={`lv-row${p.id === selectedId ? ' selected' : ''}${ruled.has(p.id) ? ' ruled' : ''}`}
             onClick={() => onSelect(p.id)}
             title={p.shortText}
           >

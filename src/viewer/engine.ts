@@ -5,11 +5,13 @@ import {
   attr,
   buildElementProps,
   definitionIds,
+  elementValues,
   rel,
   type ElementProps,
   type RawItem,
 } from '../model/properties';
 import { coreBounds, type Bounds, type Vec3 } from '../model/bounds';
+import type { ElementFacts } from '../model/takeoff';
 import { parseMapConversion, toMap, type MapConversion } from '../model/georef';
 import { surfaceAt } from '../model/measure';
 import {
@@ -68,6 +70,7 @@ const SNAP_VERTEX_PX = 12;
 const SNAP_AXIS_PX = 10;
 const SNAP_EDGE_PX = 8;
 const GEOMETRY_CACHE = 64;
+const FACTS_CHUNK = 100;
 
 /** Koordinate eines Punkts: im Modell (IFC, Meter) und, falls georeferenziert, im Kartennetz. */
 export interface SiteCoordinate {
@@ -601,33 +604,51 @@ export class BimEngine {
 
   async readProperties(pick: Pick): Promise<ElementProps> {
     const model = this.model(pick.modelId);
+    const [[item], defs] = await this.readItems(model, [pick.localId]);
+    return buildElementProps(item, defs);
+  }
+
+  /**
+   * Bauteile mit ihren Definitionen (Property-Sets, Mengen, Typen, Material).
+   * Drei schmale Abfragen statt einer tiefen: tiefe Beziehungen laufen über den Typ
+   * zu allen gleichartigen Bauteilen und werden bei großen Modellen riesig.
+   */
+  private async readItems(
+    model: FRAGS.FragmentsModel,
+    localIds: number[],
+  ): Promise<[RawItem[], RawItem[]]> {
     const only = { attributes: true, relations: false };
     const none = { attributes: false, relations: false };
-    // Drei schmale Abfragen statt einer tiefen: tiefe Beziehungen laufen über den Typ
-    // zu allen gleichartigen Bauteilen und werden bei großen Modellen riesig.
-    const [item] = (await model.getItemsData([pick.localId], {
+    const items = (await model.getItemsData(localIds, {
       attributesDefault: true,
       relationsDefault: none,
       relations: { IsDefinedBy: only, HasAssociations: only, ContainedInStructure: only },
     })) as RawItem[];
-    const defs = (await model.getItemsData(definitionIds(item), {
-      attributesDefault: true,
-      relationsDefault: none,
-      relations: {
-        HasProperties: only,
-        Quantities: only,
-        HasPropertySets: only,
-        ForLayerSet: only,
-        MaterialLayers: only,
-        MaterialConstituents: only,
-        Materials: only,
-        Material: only,
-      },
-    })) as RawItem[];
-    const typeSetIds = defs
-      .flatMap((d) => rel(d, 'HasPropertySets'))
-      .map((d) => Number(attr(d, '_localId')))
-      .filter((n) => Number.isFinite(n));
+    const defIds = [...new Set(items.flatMap(definitionIds))];
+    const defs = defIds.length
+      ? ((await model.getItemsData(defIds, {
+          attributesDefault: true,
+          relationsDefault: none,
+          relations: {
+            HasProperties: only,
+            Quantities: only,
+            HasPropertySets: only,
+            ForLayerSet: only,
+            MaterialLayers: only,
+            MaterialConstituents: only,
+            Materials: only,
+            Material: only,
+          },
+        })) as RawItem[])
+      : [];
+    const typeSetIds = [
+      ...new Set(
+        defs
+          .flatMap((d) => rel(d, 'HasPropertySets'))
+          .map((d) => Number(attr(d, '_localId')))
+          .filter((n) => Number.isFinite(n)),
+      ),
+    ];
     const typeSets = typeSetIds.length
       ? ((await model.getItemsData(typeSetIds, {
           attributesDefault: true,
@@ -635,7 +656,57 @@ export class BimEngine {
           relations: { HasProperties: only, Quantities: only },
         })) as RawItem[])
       : [];
-    return buildElementProps(item, [...defs, ...typeSets]);
+    return [items, [...defs, ...typeSets]];
+  }
+
+  /**
+   * Merkmale, Maße entlang der Bauteilachsen und Volumen für Auswahlgruppen.
+   * In Paketen, damit große Klassen den Worker nicht mit einer Riesenabfrage blockieren.
+   */
+  async elementFacts(modelId: string, localIds: number[]): Promise<ElementFacts[]> {
+    const model = this.model(modelId);
+    const facts: ElementFacts[] = [];
+    for (let i = 0; i < localIds.length; i += FACTS_CHUNK) {
+      const ids = localIds.slice(i, i + FACTS_CHUNK);
+      const [[items, defs], geometries, volumes] = await Promise.all([
+        this.readItems(model, ids),
+        model.getItemsGeometry(ids),
+        Promise.all(ids.map((id) => model.getItemsVolume([id]).catch(() => 0))),
+      ]);
+      ids.forEach((localId, k) => {
+        const item = items[k];
+        const extents = extentsOf(model, geometries[k] ?? []);
+        facts.push({
+          modelId,
+          localId,
+          guid: String(attr(item, '_guid') ?? `${modelId}#${localId}`),
+          category: String(attr(item, '_category') ?? ''),
+          name: String(attr(item, 'Name') ?? ''),
+          values: elementValues(item, defs),
+          extents: extents ?? { x: 0, y: 0, z: 0 },
+          volume: extents && volumes[k] > 0 ? volumes[k] : null,
+        });
+      });
+    }
+    return facts;
+  }
+
+  /** Hebt Gruppen in je eigener Farbe hervor (z. B. Akzent und Amber). */
+  async highlightGroups(groups: { items: OBC.ModelIdMap; color: string }[]): Promise<void> {
+    await this.fragments.resetHighlight();
+    for (const { items, color } of groups) {
+      if (!Object.values(items).some((ids) => ids.size)) continue;
+      await this.fragments.highlight(
+        {
+          color: new THREE.Color(color),
+          renderedFaces: FRAGS.RenderedFaces.TWO,
+          opacity: 1,
+          transparent: false,
+        },
+        items,
+      );
+    }
+    await this.fragments.core.update(true);
   }
 
   private model(modelId: string): FRAGS.FragmentsModel {
@@ -647,4 +718,39 @@ export class BimEngine {
   dispose(): void {
     this.components.dispose();
   }
+}
+
+/**
+ * Ausdehnung eines Bauteils entlang seiner eigenen Achsen (aus der Lage des ersten Teils),
+ * z. B. Pfahllänge entlang z. `null` ohne Geometrie.
+ */
+function extentsOf(
+  model: FRAGS.FragmentsModel,
+  meshes: FRAGS.MeshData[],
+): Record<'x' | 'y' | 'z', number> | null {
+  let axes: THREE.Vector3[] | null = null;
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  const v = new THREE.Vector3();
+  for (const mesh of meshes) {
+    if (!mesh.positions) continue;
+    const matrix = model.object.matrixWorld.clone().multiply(mesh.transform);
+    if (!axes) {
+      const [x, y, z] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+      matrix.extractBasis(x, y, z);
+      axes = orthonormal(x.toArray() as Vec3, z.toArray() as Vec3).map(
+        (a) => new THREE.Vector3(...a),
+      );
+    }
+    for (let k = 0; k + 2 < mesh.positions.length; k += 3) {
+      v.set(mesh.positions[k], mesh.positions[k + 1], mesh.positions[k + 2]).applyMatrix4(matrix);
+      axes.forEach((a, i) => {
+        const d = v.dot(a);
+        min[i] = Math.min(min[i], d);
+        max[i] = Math.max(max[i], d);
+      });
+    }
+  }
+  if (!axes) return null;
+  return { x: max[0] - min[0], y: max[1] - min[1], z: max[2] - min[2] };
 }

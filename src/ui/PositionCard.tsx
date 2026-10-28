@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { deviation, dimensionOf, type Dimension, type LvPosition } from '../model/lv';
 
 const number = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 3 });
@@ -20,8 +21,14 @@ const TOOL: Record<Dimension, string> = {
 
 interface Props {
   position: LvPosition;
-  /** Summe der Messungen in der Art der Einheit; `null`, wenn noch nichts gemessen ist. */
-  measured: { sum: number; count: number } | null;
+  /**
+   * Menge am Modell: aus der Mengenregel (Bauteile) oder, ohne Regel, Summe der freien
+   * Messungen in der Art der Einheit; `null`, wenn es noch nichts gibt.
+   */
+  measured: { sum: number; count: number; from: 'rule' | 'measure' } | null;
+  /** Mengenregel der Position; ohne Regel der Knopf zum Anlegen. */
+  rule: ReactNode | null;
+  onCreateRule: () => void;
   /** Das passende Messwerkzeug ist gerade aktiv. */
   measuring: boolean;
   onMeasure: (dimension: Dimension) => void;
@@ -29,7 +36,8 @@ interface Props {
 }
 
 /** Gewählte LV-Position neben der Summe der Messungen am Modell. */
-export function PositionCard({ position, measured, measuring, onMeasure, onClose }: Props) {
+export function PositionCard(props: Props) {
+  const { position, measured, measuring, rule, onCreateRule, onMeasure, onClose } = props;
   const dimension = dimensionOf(position.unit);
   const target = position.quantity;
   const diff = measured && target !== null ? deviation(target, measured.sum) : null;
@@ -56,7 +64,7 @@ export function PositionCard({ position, measured, measuring, onMeasure, onClose
       <div className="check-grid">
         <div className="k">LV</div>
         <div className="v">{formatQuantity(target, position.unit)}</div>
-        {dimension && (
+        {(dimension || measured) && (
           <>
             <div className="k">Am Modell</div>
             <div className="v">
@@ -64,7 +72,14 @@ export function PositionCard({ position, measured, measuring, onMeasure, onClose
               {measured && (
                 <span className="sub">
                   {' '}
-                  aus {measured.count} {measured.count === 1 ? 'Messung' : 'Messungen'}
+                  aus {measured.count}{' '}
+                  {measured.from === 'rule'
+                    ? measured.count === 1
+                      ? 'Bauteil'
+                      : 'Bauteilen'
+                    : measured.count === 1
+                      ? 'Messung'
+                      : 'Messungen'}
                 </span>
               )}
             </div>
@@ -81,7 +96,13 @@ export function PositionCard({ position, measured, measuring, onMeasure, onClose
           </>
         )}
       </div>
+      {rule}
       <div className="check-foot">
+        {!rule && (
+          <button type="button" className="btn btn-primary" onClick={onCreateRule}>
+            Bauteile zuordnen
+          </button>
+        )}
         {dimension ? (
           <button
             type="button"
@@ -92,11 +113,7 @@ export function PositionCard({ position, measured, measuring, onMeasure, onClose
             {measuring ? 'Am Modell antippen …' : TOOL[dimension]}
           </button>
         ) : (
-          <span className="sub">
-            {position.unit
-              ? `„${position.unit}“ lässt sich am Modell nicht messen.`
-              : 'Position ohne Einheit.'}
-          </span>
+          !rule && <span className="sub">{position.unit ? '' : 'Position ohne Einheit.'}</span>
         )}
       </div>
       {position.longText && (
