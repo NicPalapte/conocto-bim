@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  GAEBParseError,
+  GAEBValidationError,
+  GAEBVersionError,
+  fileExtension,
+  isGaebExtension,
+} from './core';
 import type { Vec3 } from './model/bounds';
+import { dimensionOf, listPositions, type Dimension, type LoadedLv } from './model/lv';
 import { formatArea, formatCoordinate, formatLength, formatVolume, segment } from './model/measure';
 import type { ElementProps } from './model/properties';
 import {
@@ -15,6 +23,8 @@ import { AxisGizmo } from './ui/AxisGizmo';
 import { ConoctoMark } from './ui/ConoctoMark';
 import { MeasureLabels, type MeasureMode, type Measurement } from './ui/MeasureLabels';
 import { TreeLevel } from './ui/ModelTree';
+import { LvList } from './ui/LvList';
+import { PositionCard } from './ui/PositionCard';
 import { PropertiesPanel, type GroupInfo } from './ui/PropertiesPanel';
 import {
   BimEngine,
@@ -79,6 +89,19 @@ function isIfc(file: File): boolean {
   return /\.ifc$/i.test(file.name);
 }
 
+function isGaeb(file: File): boolean {
+  return isGaebExtension(fileExtension(file.name));
+}
+
+const GAEB_ACCEPT = '.x81,.x82,.x83,.x84,.x85,.x86,.xml';
+
+/** Messart, deren Summe zur Einheit einer Position passt. */
+const MODE_OF: Record<Dimension, MeasureMode> = {
+  length: 'distance',
+  area: 'area',
+  volume: 'volume',
+};
+
 export function App() {
   const stageRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<BimEngine | null>(null);
@@ -95,6 +118,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const lvInput = useRef<HTMLInputElement>(null);
+  const [lv, setLv] = useState<LoadedLv | null>(null);
+  const [positionId, setPositionId] = useState<string | null>(null);
   const [mode, setMode] = useState<MeasureMode | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [pending, setPending] = useState<{ point: Vec3; axes: ElementAxes | null } | null>(null);
@@ -148,7 +174,26 @@ export function App() {
   const addFiles = useCallback(
     async (files: File[]) => {
       const ifc = files.filter(isIfc);
-      if (ifc.length < files.length) setError('Nur .ifc-Dateien werden geöffnet.');
+      const gaeb = files.filter(isGaeb);
+      if (ifc.length + gaeb.length < files.length) {
+        setError('Nur IFC- und GAEB-Dateien (X81–X86) werden geöffnet.');
+      }
+      // Es gibt immer nur ein LV: die zuletzt gewählte GAEB-Datei ersetzt das alte.
+      const lvFile = gaeb.at(-1);
+      if (lvFile) {
+        try {
+          setLv(listPositions(new Uint8Array(await lvFile.arrayBuffer()), lvFile.name));
+          setPositionId(null);
+        } catch (err) {
+          const known =
+            err instanceof GAEBParseError ||
+            err instanceof GAEBValidationError ||
+            err instanceof GAEBVersionError;
+          if (!known) console.error(err);
+          setError(`${lvFile.name} konnte nicht gelesen werden${known ? `: ${err.message}` : '.'}`);
+        }
+      }
+      if (!ifc.length) return;
       await engine.init(stageRef.current!);
       for (const file of ifc) {
         const key = crypto.randomUUID();
@@ -295,6 +340,7 @@ export function App() {
         engine.drawPoints(id, [pending.point, point]);
         engine.drawLine(id, pending.point, point);
         add({
+          value: s.length,
           anchor: pending.point.map((v, i) => (v + point[i]) / 2) as Vec3,
           lines: [
             formatLength(s.length),
@@ -527,6 +573,16 @@ export function App() {
       text: `${mode === 'area' ? formatArea(sum) : formatVolume(sum)} · ${values.length}`,
     };
   }, [mode, measurements]);
+  const position = lv?.positions.find((p) => p.id === positionId) ?? null;
+  const measured = useMemo(() => {
+    const dimension = position ? dimensionOf(position.unit) : null;
+    if (!dimension) return null;
+    const values = measurements.filter(
+      (m) => m.kind === MODE_OF[dimension] && m.value !== undefined,
+    );
+    if (!values.length) return null;
+    return { sum: values.reduce((n, m) => n + (m.value ?? 0), 0), count: values.length };
+  }, [position, measurements]);
   const totalElements = models.reduce((n, m) => n + m.elementCount, 0);
 
   return (
@@ -541,8 +597,23 @@ export function App() {
         <span className="spacer" />
         <span className="meta">
           {models.length === 1 ? '1 Modell' : `${models.length} Modelle`} ·{' '}
-          {totalElements.toLocaleString('de-DE')} Bauteile · nur lokal
+          {totalElements.toLocaleString('de-DE')} Bauteile
+          {lv ? ` · LV ${lv.positions.length.toLocaleString('de-DE')} Positionen` : ''} · nur lokal
         </span>
+        <input
+          ref={lvInput}
+          type="file"
+          accept={GAEB_ACCEPT}
+          hidden
+          onChange={(e) => {
+            const files = [...(e.target.files ?? [])];
+            e.target.value = '';
+            void addFiles(files);
+          }}
+        />
+        <button type="button" className="btn" onClick={() => lvInput.current?.click()}>
+          LV hinzufügen
+        </button>
         <input
           ref={fileInput}
           type="file"
@@ -564,76 +635,94 @@ export function App() {
         </button>
       </header>
 
-      {(models.length > 0 || loading.length > 0) && (
+      {(models.length > 0 || loading.length > 0 || lv) && (
         <aside
-          className={`panel panel-left float${selection ? ' hidden-small' : ''}`}
-          aria-label="Modelle"
+          className={`panel panel-left float${selection || position ? ' hidden-small' : ''}`}
+          aria-label="Modelle und LV"
         >
-          <div className="panel-head">
-            <span className="label">Modelle</span>
-            <input
-              className="search"
-              type="search"
-              placeholder="Name, Klasse oder GUID"
-              aria-label="Bauteil suchen"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+          {(models.length > 0 || loading.length > 0) && (
+            <section className="section" aria-label="Modelle">
+              <div className="panel-head">
+                <span className="label">Modelle</span>
+                <input
+                  className="search"
+                  type="search"
+                  placeholder="Name, Klasse oder GUID"
+                  aria-label="Bauteil suchen"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+              <div className="scroll" role="tree">
+                {filtered.map(({ model, nodes }) => (
+                  <div key={model.id}>
+                    <div className="model-row">
+                      <input
+                        type="checkbox"
+                        checked={model.visible}
+                        aria-label={`${model.name} anzeigen`}
+                        onChange={(e) => setVisible(model.id, e.target.checked)}
+                      />
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        style={{ padding: 0, width: 12 }}
+                        aria-label={expanded.has(model.id) ? 'Zuklappen' : 'Aufklappen'}
+                        onClick={() => toggle(model.id)}
+                      >
+                        {expanded.has(model.id) || searching ? '▾' : '▸'}
+                      </button>
+                      <span className="name" title={model.name}>
+                        {model.name}
+                      </span>
+                      <span className="meta">{model.schema.replace('_ADD2', '')}</span>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label={`${model.name} entfernen`}
+                        onClick={() => removeModel(model.id)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {(expanded.has(model.id) || searching) && (
+                      <TreeLevel
+                        nodes={nodes}
+                        depth={0}
+                        expanded={searching ? new Set(allKeys(nodes)) : expanded}
+                        selectedKey={selection?.key ?? null}
+                        onToggle={toggle}
+                        onSelect={(n) => selectNode(model.id, n)}
+                        onFocus={(n) => focusNode(model.id, n)}
+                      />
+                    )}
+                  </div>
+                ))}
+                {loading.map((l) => (
+                  <div key={l.key} className="loading-row">
+                    {l.name}
+                    <div className="bar">
+                      <span style={{ width: `${Math.round(l.share * 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+          {lv && (
+            <LvList
+              lv={lv}
+              selectedId={positionId}
+              onSelect={(id) => {
+                setPositionId(id);
+                setSelection(null);
+              }}
+              onRemove={() => {
+                setLv(null);
+                setPositionId(null);
+              }}
             />
-          </div>
-          <div className="scroll" role="tree">
-            {filtered.map(({ model, nodes }) => (
-              <div key={model.id}>
-                <div className="model-row">
-                  <input
-                    type="checkbox"
-                    checked={model.visible}
-                    aria-label={`${model.name} anzeigen`}
-                    onChange={(e) => setVisible(model.id, e.target.checked)}
-                  />
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    style={{ padding: 0, width: 12 }}
-                    aria-label={expanded.has(model.id) ? 'Zuklappen' : 'Aufklappen'}
-                    onClick={() => toggle(model.id)}
-                  >
-                    {expanded.has(model.id) || searching ? '▾' : '▸'}
-                  </button>
-                  <span className="name" title={model.name}>
-                    {model.name}
-                  </span>
-                  <span className="meta">{model.schema.replace('_ADD2', '')}</span>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label={`${model.name} entfernen`}
-                    onClick={() => removeModel(model.id)}
-                  >
-                    ✕
-                  </button>
-                </div>
-                {(expanded.has(model.id) || searching) && (
-                  <TreeLevel
-                    nodes={nodes}
-                    depth={0}
-                    expanded={searching ? new Set(allKeys(nodes)) : expanded}
-                    selectedKey={selection?.key ?? null}
-                    onToggle={toggle}
-                    onSelect={(n) => selectNode(model.id, n)}
-                    onFocus={(n) => focusNode(model.id, n)}
-                  />
-                )}
-              </div>
-            ))}
-            {loading.map((l) => (
-              <div key={l.key} className="loading-row">
-                {l.name}
-                <div className="bar">
-                  <span style={{ width: `${Math.round(l.share * 100)}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
+          )}
         </aside>
       )}
 
@@ -711,6 +800,19 @@ export function App() {
         </div>
       )}
 
+      {position && !selection && (
+        <PositionCard
+          position={position}
+          measured={measured}
+          measuring={(() => {
+            const dimension = dimensionOf(position.unit);
+            return dimension !== null && mode === MODE_OF[dimension];
+          })()}
+          onMeasure={(dimension) => startMode(MODE_OF[dimension])}
+          onClose={() => setPositionId(null)}
+        />
+      )}
+
       {selection && selectedModel && (
         <PropertiesPanel
           modelName={selectedModel.name}
@@ -725,14 +827,23 @@ export function App() {
       {models.length === 0 && loading.length === 0 && (
         <div className="empty float surface">
           <h1>IFC-Modelle ansehen</h1>
-          <p>Dateien hierher ziehen oder hinzufügen. Sie bleiben auf diesem Rechner.</p>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => fileInput.current?.click()}
-          >
-            IFC hinzufügen
-          </button>
+          <p>
+            Modelle und LV (GAEB) hierher ziehen oder hinzufügen. Sie bleiben auf diesem Rechner.
+          </p>
+          <div className="empty-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => fileInput.current?.click()}
+            >
+              IFC hinzufügen
+            </button>
+            {!lv && (
+              <button type="button" className="btn" onClick={() => lvInput.current?.click()}>
+                LV hinzufügen
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -774,7 +885,7 @@ export function App() {
         </div>
       )}
 
-      {dragging && <div className="drop">IFC-Dateien ablegen</div>}
+      {dragging && <div className="drop">IFC- oder GAEB-Dateien ablegen</div>}
     </>
   );
 }

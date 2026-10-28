@@ -7,6 +7,11 @@
 - Nie Modelldateien (`*.ifc`, `*.frag`) committen; Tests nur mit synthetischen Daten
   oder öffentlichen buildingSMART-Beispielen außerhalb des Repos.
 - 3D-Bibliothek nur über `src/viewer/engine.ts` (`BimEngine`) ansprechen; UI kennt That Open nicht.
+- LV-Kern (GAEB-Parser, Fingerabdruck `bubble-pos-v1`) liegt als Kopie in `src/core/`
+  (Stand in `src/core/QUELLE.md`). Nie dort ändern: Änderung in bubbleLV
+  `packages/core`, dann `node scripts/sync-core.mjs <bubbleLV-Pfad>`. `tests/core.test.ts`
+  hält die Fingerabdrücke gleich mit Conocto Doc. Kein eigener GAEB-Parser.
+- LV wird nicht gespeichert; immer nur ein LV geladen.
 - Fachlogik ohne 3D in `src/model/` als reine Funktionen mit Vitest-Tests (`tests/`).
 - `web-ifc` exakt auf die Version pinnen, die `@thatopen/fragments` erwartet
   (sonst „StreamMeshes called with 4 arguments“).
@@ -17,4 +22,4 @@
   Hinweise amber. Wird durch Paket `@conocto/design` ersetzt.
 - Texte für den Owner (README, PR, Commits): Deutsch, einfache Sprache, Ergebnis zuerst.
 - Commits: Conventional Commits, `feat|fix|refactor|test|chore|docs(<scope>): …`,
-  Scopes `viewer · tree · props · ui · ci`.
+  Scopes `viewer · tree · props · ui · lv · ci`.
