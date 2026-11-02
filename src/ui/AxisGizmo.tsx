@@ -17,7 +17,7 @@ export function AxisGizmo({ axes, onTop }: Props) {
     .sort((a, b) => a.depth - b.depth);
   return (
     <svg
-      className="axes float"
+      className="axes cn-glass"
       width={SIZE}
       height={SIZE}
       viewBox={`0 0 ${SIZE} ${SIZE}`}

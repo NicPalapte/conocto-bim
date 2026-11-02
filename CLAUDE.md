@@ -21,9 +21,14 @@
   (sonst „StreamMeshes called with 4 arguments“).
 - WASM und Fragments-Worker werden aus `public/` ausgeliefert (Vite-Plugin in
   `vite.config.ts`), kein CDN.
-- Look: Conocto-Tokens (`src/styles/conocto-tokens.css`, Kopie aus bubbleLV
-  `.claude/skills/conocto-design/tokens/`); Akzent Ziegelrot nur für Auswahl/Interaktion,
-  Hinweise amber. Wird durch Paket `@conocto/design` ersetzt.
+- Look nur über Paket `@conocto/design` (feste Version in `package.json`, geladen in
+  `src/main.tsx`: `fonts`, `tokens.css`, `styles.css`; Entscheidung 0001). Keine eigene
+  Token-Kopie, keine Hex-Werte in `src/` (Ausnahme `#fff` auf `--accent-fill`); Farben für
+  Three.js über `tokenColor()` (`src/viewer/tokens.ts`). Fehlt ein Token/Baustein ⇒ in
+  `conocto-design` ergänzen, nicht lokal. Akzent `--accent*` nur für Auswahl/Interaktion,
+  Hinweise amber.
+- Seitenbereiche flach wie in Conocto Doc (am Rand, 1-px-Linie, Kopfzeile `.pane-head`
+  32 px grau); über dem Modell schweben nur kleine Bedienelemente (`cn-pill`, `cn-glass`).
 - Texte für den Owner (README, PR, Commits): Deutsch, einfache Sprache, Ergebnis zuerst.
 - Commits: Conventional Commits, `feat|fix|refactor|test|chore|docs(<scope>): …`,
   Scopes `viewer · tree · props · ui · lv · ci`.

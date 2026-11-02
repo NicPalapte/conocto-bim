@@ -23,6 +23,7 @@ import {
 } from '../model/snap';
 import { collectIds, type ItemLabel, type RawSpatialItem } from '../model/tree';
 import { MeasureOverlay } from './overlay';
+import { tokenColor } from './tokens';
 
 export interface LoadedModel {
   id: string;
@@ -133,8 +134,8 @@ export class BimEngine {
     this.components.init();
     this.world = world;
     this.grid = this.components.get(OBC.Grids).create(world);
-    // Neutralgrau ist auf hellem und dunklem Hintergrund lesbar.
-    this.grid.config.color = new THREE.Color('#aeaeb2');
+    // Stärkste Linienfarbe: im hellen und dunklen Thema sichtbar, aber zurückhaltend.
+    this.grid.config.color = new THREE.Color(tokenColor('--line2'));
     this.grid.config.visible = false;
     world.scene.three.add(this.overlay.group);
 

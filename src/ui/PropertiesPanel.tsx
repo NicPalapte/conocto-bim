@@ -40,19 +40,15 @@ export function PropertiesPanel({ modelName, element, group, placement, loading,
   const eyebrow = [className(category), placement.part?.label].filter(Boolean).join(' · ');
   const title = element?.name ?? group?.label ?? '…';
   return (
-    <aside className="panel panel-right float" aria-label="Eigenschaften">
+    <aside className="panel panel-right" aria-label="Eigenschaften">
+      <div className="pane-head">
+        <span className="title">Eigenschaften</span>
+        <button type="button" className="icon-btn" aria-label="Auswahl aufheben" onClick={onClose}>
+          ✕
+        </button>
+      </div>
       <div className="props-head">
-        <div className="eyebrow-row">
-          <span className="label">{eyebrow}</span>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Auswahl aufheben"
-            onClick={onClose}
-          >
-            ✕
-          </button>
-        </div>
+        {eyebrow && <div className="label eyebrow">{eyebrow}</div>}
         <h2>{title}</h2>
         <div className="sub">
           {modelName}

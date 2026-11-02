@@ -25,16 +25,16 @@ export function LvList(props: Props) {
   const shown = matches.slice(0, MAX_ROWS);
   return (
     <section className="section" aria-label="Leistungsverzeichnis">
+      <div className="pane-head">
+        <span className="title">LV</span>
+        <span className="name" title={lv.name}>
+          {lv.projectName ?? lv.name}
+        </span>
+        <button type="button" className="icon-btn" aria-label="LV schließen" onClick={onRemove}>
+          ✕
+        </button>
+      </div>
       <div className="panel-head">
-        <div className="section-title">
-          <span className="label">LV</span>
-          <span className="name" title={lv.name}>
-            {lv.projectName ?? lv.name}
-          </span>
-          <button type="button" className="icon-btn" aria-label="LV schließen" onClick={onRemove}>
-            ✕
-          </button>
-        </div>
         <div className="lv-actions">
           <span className="sub">Mengenregeln</span>
           <button type="button" className="icon-btn" onClick={onLoadRules}>

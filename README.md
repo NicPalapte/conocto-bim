@@ -35,4 +35,4 @@ npm run dev
 - [That Open Engine](https://github.com/ThatOpen): `web-ifc` (IFC lesen, WebAssembly),
   Fragments (kompakte Geometrie), Three.js (3D)
 - Vite · React · TypeScript
-- Look: Conocto-Designsystem (Tokens in `src/styles/conocto-tokens.css`)
+- Look: Conocto-Designsystem, Paket `@conocto/design` (wie Conocto Doc)

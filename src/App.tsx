@@ -39,13 +39,14 @@ import {
   type TreeNode,
 } from './model/tree';
 import { AxisGizmo } from './ui/AxisGizmo';
-import { ConoctoMark } from './ui/ConoctoMark';
+import { ConoctoMark } from '@conocto/design';
 import { MeasureLabels, type MeasureMode, type Measurement } from './ui/MeasureLabels';
 import { TreeLevel } from './ui/ModelTree';
 import { LvList } from './ui/LvList';
 import { PositionCard } from './ui/PositionCard';
 import { RuleEditor } from './ui/RuleEditor';
 import { PropertiesPanel, type GroupInfo } from './ui/PropertiesPanel';
+import { tokenColor } from './viewer/tokens';
 import {
   BimEngine,
   type ElementAxes,
@@ -82,15 +83,11 @@ interface Selection {
 
 const NO_PLACEMENT: Placement = { facility: null, part: null };
 
-function amberColor(): string {
-  return getComputedStyle(document.documentElement).getPropertyValue('--amber').trim() || '#b36200';
-}
+const amberColor = () => tokenColor('--amber');
 
 const factKey = (modelId: string, localId: number) => `${modelId}#${localId}`;
 
-function accentColor(): string {
-  return getComputedStyle(document.documentElement).getPropertyValue('--blue').trim() || '#c8362b';
-}
+const accentColor = () => tokenColor('--accent');
 
 const MODES: { mode: MeasureMode; label: string; hint: string }[] = [
   { mode: 'point', label: 'Punkt', hint: 'Punkt antippen' },
@@ -795,9 +792,9 @@ export function App() {
     <>
       <div ref={stageRef} className="stage" />
 
-      <header className="topbar float">
+      <header className="topbar">
         <span className="wordmark">
-          <ConoctoMark />
+          <ConoctoMark size={24} />
           conocto <span className="sub">bim</span>
         </span>
         <span className="spacer" />
@@ -854,13 +851,15 @@ export function App() {
 
       {(models.length > 0 || loading.length > 0 || lv) && (
         <aside
-          className={`panel panel-left float${selection || position ? ' hidden-small' : ''}`}
+          className={`panel panel-left${selection || position ? ' hidden-small' : ''}`}
           aria-label="Modelle und LV"
         >
           {(models.length > 0 || loading.length > 0) && (
             <section className="section" aria-label="Modelle">
+              <div className="pane-head">
+                <span className="title">Modelle</span>
+              </div>
               <div className="panel-head">
-                <span className="label">Modelle</span>
                 <input
                   className="search"
                   type="search"
@@ -947,7 +946,7 @@ export function App() {
       )}
 
       {models.length > 0 && (
-        <div className="toolbar float" role="toolbar" aria-label="Ansicht">
+        <div className="toolbar cn-pill" role="toolbar" aria-label="Ansicht">
           <button
             type="button"
             className="btn"
@@ -1078,7 +1077,7 @@ export function App() {
       )}
 
       {models.length === 0 && loading.length === 0 && (
-        <div className="empty float surface">
+        <div className="empty cn-window">
           <h1>IFC-Modelle ansehen</h1>
           <p>
             Modelle und LV (GAEB) hierher ziehen oder hinzufügen. Sie bleiben auf diesem Rechner.
@@ -1113,7 +1112,7 @@ export function App() {
       )}
 
       {models.length > 0 && (
-        <div className={`hint float${mode || picking ? ' measuring' : ''}`}>
+        <div className={`hint cn-pill${mode || picking ? ' measuring' : ''}`}>
           {mode
             ? [
                 pending ? 'Endpunkt antippen' : MODES.find((m) => m.mode === mode)?.hint,

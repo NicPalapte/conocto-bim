@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Vec3 } from '../model/bounds';
+import { tokenColor } from './tokens';
 
 /**
  * Messgrafik über dem Modell: Punkte, Linien und eingefärbte Flächen. Punkte und Linien
@@ -8,7 +9,7 @@ import type { Vec3 } from '../model/bounds';
 export class MeasureOverlay {
   readonly group = new THREE.Group();
   private readonly items = new Map<string, THREE.Object3D[]>();
-  private color = new THREE.Color('#c8362b');
+  private color = new THREE.Color(tokenColor('--accent'));
 
   constructor() {
     this.group.renderOrder = 10;
