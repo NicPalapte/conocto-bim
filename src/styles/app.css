@@ -1,6 +1,6 @@
 /* Conocto BIM – Layout. Farben, Schrift, Abstände nur über die Tokens aus @conocto/design;
-   keine festen Farbwerte hier. Seitenbereiche flach wie die Bereiche in Conocto Doc,
-   über dem Modell schweben nur kleine Bedienelemente (cn-pill, cn-glass, cn-window). */
+   keine festen Farbwerte hier. Seitenbereiche schweben als Fenster wie in Conocto Doc
+   (cn-window), Kopfzeile wie die Bereiche im Splitscreen; Bedienelemente cn-pill/cn-glass. */
 
 *,
 *::before,
@@ -25,7 +25,7 @@ input {
   color: inherit;
 }
 
-/* Bühne: die 3D-Ansicht füllt das Fenster; Kopfleiste und Seitenbereiche liegen am Rand. */
+/* Bühne: die 3D-Ansicht füllt das Fenster; Seitenbereiche schweben darüber. */
 .stage {
   position: fixed;
   inset: 0;
@@ -123,8 +123,8 @@ input {
 
 .panel {
   position: fixed;
-  top: var(--h-topbar);
-  bottom: 0;
+  top: calc(var(--h-topbar) + 12px);
+  bottom: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -133,15 +133,13 @@ input {
 }
 
 .panel-left {
-  left: 0;
+  left: 12px;
   width: 280px;
-  border-right: 1px solid var(--line);
 }
 
 .panel-right {
-  right: 0;
+  right: 12px;
   width: var(--w-props);
-  border-left: 1px solid var(--line);
 }
 
 /* Kopfzeile eines Bereichs wie in Conocto Doc: 32 px, grau, Linie unten. */
@@ -361,7 +359,7 @@ input {
 /* Achsenkreuz unten links, rechts neben der Modell-Leiste. */
 .axes {
   position: fixed;
-  left: calc(280px + 12px);
+  left: calc(12px + 280px + 12px);
   bottom: 12px;
   border-radius: 50%;
   box-shadow: var(--shadow-sm);
@@ -599,13 +597,10 @@ input {
   .panel-left,
   .panel-right {
     top: auto;
-    left: 0;
-    right: 0;
+    left: 12px;
+    right: 12px;
     width: auto;
     height: 40%;
-    border-left: none;
-    border-right: none;
-    border-top: 1px solid var(--line);
   }
 
   .panel-left.hidden-small {
@@ -621,7 +616,7 @@ input {
 
   .axes {
     left: 12px;
-    bottom: calc(40% + 12px);
+    bottom: calc(40% + 24px);
   }
 }
 
@@ -721,6 +716,12 @@ input {
 .check-card h2 .oz {
   color: var(--mute);
   font-weight: var(--fw-regular);
+}
+
+/* Positionskarte nur so hoch wie ihr Inhalt: mehr Blick aufs Modell. */
+.check-card {
+  bottom: auto;
+  max-height: calc(100% - var(--h-topbar) - 24px);
 }
 
 .check-grid {

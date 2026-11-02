@@ -40,7 +40,7 @@ export function PropertiesPanel({ modelName, element, group, placement, loading,
   const eyebrow = [className(category), placement.part?.label].filter(Boolean).join(' · ');
   const title = element?.name ?? group?.label ?? '…';
   return (
-    <aside className="panel panel-right" aria-label="Eigenschaften">
+    <aside className="panel panel-right cn-window" aria-label="Eigenschaften">
       <div className="pane-head">
         <span className="title">Eigenschaften</span>
         <button type="button" className="icon-btn" aria-label="Auswahl aufheben" onClick={onClose}>

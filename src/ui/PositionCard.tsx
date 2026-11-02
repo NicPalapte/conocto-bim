@@ -42,7 +42,7 @@ export function PositionCard(props: Props) {
   const target = position.quantity;
   const diff = measured && target !== null ? deviation(target, measured.sum) : null;
   return (
-    <aside className="panel panel-right check-card" aria-label="LV-Position">
+    <aside className="panel panel-right check-card cn-window" aria-label="LV-Position">
       <div className="pane-head">
         <span className="title">Position</span>
         <button

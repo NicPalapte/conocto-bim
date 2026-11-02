@@ -851,7 +851,7 @@ export function App() {
 
       {(models.length > 0 || loading.length > 0 || lv) && (
         <aside
-          className={`panel panel-left${selection || position ? ' hidden-small' : ''}`}
+          className={`panel panel-left cn-window${selection || position ? ' hidden-small' : ''}`}
           aria-label="Modelle und LV"
         >
           {(models.length > 0 || loading.length > 0) && (
