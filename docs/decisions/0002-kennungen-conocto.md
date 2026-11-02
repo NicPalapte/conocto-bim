@@ -13,7 +13,6 @@
 ## Folgen
 - Alte Verknüpfungsdateien `conocto-bim-links-v1` passen nicht mehr zu neu geladenen LVs.
   Mengenregeln einmal neu anlegen.
-- Erst mergen, wenn der PR in bubbleLV gemergt ist. Danach `node scripts/sync-core.mjs`
-  laufen lassen, damit `src/core/QUELLE.md` auf den Stand von `main` zeigt.
+- Kern-Stand zeigt auf bubbleLV `main` nach dem Merge der Umbenennung.
 - Der Repo-Name `bubbleLV` in `scripts/sync-core.mjs` und README bleibt, bis der Owner das
   Repo umbenennt.

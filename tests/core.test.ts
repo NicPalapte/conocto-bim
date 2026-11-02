@@ -9,7 +9,7 @@ import { dimensionOf, listPositions, matchPositions } from '../src/model/lv';
 const bytes = new Uint8Array(readFileSync(resolve(__dirname, 'fixtures/sample.X83')));
 
 describe('LV-Kern aus Conocto Doc', () => {
-  // Werte aus Conocto Doc (bubbleLV c37b607) für dasselbe Fixture. Weichen sie ab, passen
+  // Werte aus Conocto Doc (bubbleLV 92a01db) für dasselbe Fixture. Weichen sie ab, passen
   // Verknüpfungen zwischen Doc und BIM nicht mehr zusammen.
   it('liefert dieselben Fingerabdrücke wie Doc', () => {
     const draft = mapToLvDraft(getGaebParser().parse(bytes, 'sample.X83'));
