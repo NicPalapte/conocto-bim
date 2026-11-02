@@ -19,3 +19,8 @@ export {
   type LvExportPosition,
   type LvExportSection,
 } from './export/lvExport';
+export { compileStichworte, stichwortQuelle, stichwortSource, WORD_CHAR } from './text/stichwort';
+export { SENTENCE_REACH, sentenceAround } from './text/sentence';
+export * from './rules/rule';
+export * from './rules/evaluate';
+export { blocksFromSelection } from './rules/fromSelection';

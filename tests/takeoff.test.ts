@@ -89,7 +89,7 @@ describe('Messansatz', () => {
 describe('Regeldatei', () => {
   it('schreibt und liest dieselben Regeln', () => {
     const rules = [
-      { position: 'f1d7e97972', group: emptyGroup('IFCPILE'), takeoff: { kind: 'count' as const } },
+      { position: '22036e66f6', group: emptyGroup('IFCPILE'), takeoff: { kind: 'count' as const } },
     ];
     const text = JSON.stringify(toLinksFile({ fileId: 'd5e59abe0647', name: 'a.x83' }, rules));
     expect(parseLinksFile(text).rules).toEqual(rules);
