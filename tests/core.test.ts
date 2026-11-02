@@ -9,15 +9,15 @@ import { dimensionOf, listPositions, matchPositions } from '../src/model/lv';
 const bytes = new Uint8Array(readFileSync(resolve(__dirname, 'fixtures/sample.X83')));
 
 describe('LV-Kern aus Conocto Doc', () => {
-  // Werte aus Conocto Doc (bubbleLV acf2245) für dasselbe Fixture. Weichen sie ab, passen
+  // Werte aus Conocto Doc (bubbleLV c37b607) für dasselbe Fixture. Weichen sie ab, passen
   // Verknüpfungen zwischen Doc und BIM nicht mehr zusammen.
   it('liefert dieselben Fingerabdrücke wie Doc', () => {
     const draft = mapToLvDraft(getGaebParser().parse(bytes, 'sample.X83'));
     expect(fileIdOf(bytes)).toBe('d5e59abe0647');
     expect([...hashPositions(draft)].map(([p, h]) => [p.oz, h.id])).toEqual([
-      ['01.01.0010', '5f56eac219'],
-      ['01.01.0020', 'b777a421c6'],
-      ['01.02.0010', 'f1d7e97972'],
+      ['01.01.0010', '2992dc8da1'],
+      ['01.01.0020', 'c2dcd2e8f4'],
+      ['01.02.0010', '22036e66f6'],
     ]);
   });
 });
@@ -28,7 +28,7 @@ describe('listPositions', () => {
     expect(lv.fileId).toBe('d5e59abe0647');
     expect(lv.positions).toHaveLength(3);
     expect(lv.positions[0]).toMatchObject({
-      id: '5f56eac219',
+      id: '2992dc8da1',
       oz: '01.01.0010',
       shortText: 'Oberboden abtragen',
       quantity: 100,

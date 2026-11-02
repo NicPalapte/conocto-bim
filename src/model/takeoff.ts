@@ -45,7 +45,7 @@ export type Takeoff =
   | { kind: 'value'; key: string };
 
 export interface Rule {
-  /** Fingerabdruck der Position (`bubble-pos-v1`). */
+  /** Fingerabdruck der Position (`conocto-pos-v1`). */
   position: string;
   group: Group;
   takeoff: Takeoff;

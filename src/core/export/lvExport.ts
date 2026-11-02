@@ -6,7 +6,7 @@ import { hashPositions, POSITION_HASH_SCHEMA, type PositionHashes } from '../has
 import type { LVDraft, PositionDraft, SectionDraft } from '../model/lvDraft';
 
 /** Schema-Kennung; ändert sich nur mit einer neuen Entscheidung. */
-export const LV_EXPORT_SCHEMA = 'bubble-lv-export-v1';
+export const LV_EXPORT_SCHEMA = 'conocto-lv-export-v1';
 
 export type LvExportPosition = Omit<PositionDraft, 'attributes'> & { hashes: PositionHashes };
 

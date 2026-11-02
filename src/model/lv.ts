@@ -9,7 +9,7 @@ import {
 
 /** Eine LV-Position, flach für Liste und Prüfung. */
 export interface LvPosition {
-  /** Fingerabdruck `bubble-pos-v1` (`hashes.id`), gleich wie in Conocto Doc. */
+  /** Fingerabdruck `conocto-pos-v1` (`hashes.id`), gleich wie in Conocto Doc. */
   id: string;
   oz: string;
   shortText: string;

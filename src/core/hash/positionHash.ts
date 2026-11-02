@@ -15,7 +15,7 @@ const PART_LENGTH = 16;
 /** Länge der Datei-ID im Link. */
 const FILE_ID_LENGTH = 12;
 /** Version der Normierung. Ändert sich die Normierung, ändern sich alle Hashes. */
-export const POSITION_HASH_SCHEMA = 'bubble-pos-v1';
+export const POSITION_HASH_SCHEMA = 'conocto-pos-v1';
 
 export interface PositionHashes {
   /** Gesamt-Hash, eindeutig in der Datei; bei Gleichstand mit `-2`, `-3` … */

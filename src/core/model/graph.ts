@@ -79,7 +79,7 @@ export interface GraphEdge {
 
 export interface ProjectGraph {
   /** Schema-Kennung; ändert sich nur mit einer neuen Entscheidung. */
-  schema: 'bubble-graph-v1';
+  schema: 'conocto-graph-v1';
   nodes: GraphNode[];
   edges: GraphEdge[];
 }
