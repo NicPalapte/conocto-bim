@@ -87,15 +87,23 @@ export function surfaceAt(
 ): { triangles: number[]; area: number } | null {
   const seed = triangleAt(t, p);
   if (seed < 0) return null;
+  const triangles = floodSide(t, [seed], maxAngle);
+  const area = triangles.reduce((sum, i) => sum + triangleNormal(t, i).area, 0);
+  return { triangles, area };
+}
+
+/**
+ * Alle Dreiecke, die von den Start-Dreiecken aus ohne Knick über `maxAngle` Grad
+ * erreichbar sind (über gemeinsame Ecken). Sortierte Dreieck-Nummern.
+ */
+export function floodSide(t: Triangles, seeds: number[], maxAngle = SIDE_ANGLE): number[] {
   const minCos = Math.cos((maxAngle * Math.PI) / 180);
   const count = Math.floor(t.length / 9);
   const normals: Vec3[] = [];
-  const areas: number[] = [];
   const byVertex = new Map<string, number[]>();
   for (let i = 0; i < count; i++) {
     const tn = triangleNormal(t, i);
     normals.push(tn.n);
-    areas.push(tn.area);
     if (!tn.area) continue;
     for (let c = 0; c < 3; c++) {
       const key = vertexKey(corner(t, i, c));
@@ -104,8 +112,8 @@ export function surfaceAt(
       byVertex.set(key, list);
     }
   }
-  const seen = new Set([seed]);
-  const queue = [seed];
+  const seen = new Set(seeds);
+  const queue = [...seeds];
   while (queue.length) {
     const i = queue.pop()!;
     for (let c = 0; c < 3; c++) {
@@ -116,9 +124,7 @@ export function surfaceAt(
       }
     }
   }
-  const triangles = [...seen].sort((a, b) => a - b);
-  const area = triangles.reduce((sum, i) => sum + areas[i], 0);
-  return { triangles, area };
+  return [...seen].sort((a, b) => a - b);
 }
 
 const fmt = (digits: number) =>

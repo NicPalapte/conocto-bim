@@ -8,7 +8,9 @@ import {
   members,
   parseLinksFile,
   toLinksFile,
+  transferFaces,
   type ElementFacts,
+  type SidesTakeoff,
 } from '../src/model/takeoff';
 
 function pile(guid: string, length: number, diameter: number, volume: number | null) {
@@ -83,6 +85,35 @@ describe('Messansatz', () => {
     expect(defaultTakeoff('volume', 'm3')).toEqual({ kind: 'volume' });
     expect(defaultTakeoff('length', 'm')).toEqual({ kind: 'length', axis: 'z' });
     expect(defaultTakeoff(null, 'St')).toEqual({ kind: 'count' });
+    expect(defaultTakeoff('area', 'm2')).toEqual({ kind: 'sides', faces: {}, joints: [] });
+  });
+});
+
+describe('Seiten + Fugen', () => {
+  const takeoff: SidesTakeoff = {
+    kind: 'sides',
+    faces: {
+      p1: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+    },
+    joints: [{ guid: 'p1', how: 'quer', normal: [1, 0, 0], from: 10 }],
+  };
+
+  it('nimmt die vom Viewer gerechnete Menge je Bauteil, sonst kein Wert', () => {
+    const rule = { group: emptyGroup('IFCPILE'), takeoff };
+    const result = applyRule(elements, rule, new Map([['p1', 43.2]]));
+    expect(result.sum).toBeCloseTo(43.2);
+    expect(result.missing).toBe(3);
+  });
+
+  it('überträgt die Seiten eines Musters, Fugen bleiben am Bauteil', () => {
+    const next = transferFaces(takeoff, 'p1', ['p2', 'p3']);
+    expect(next.faces.p2).toEqual(takeoff.faces.p1);
+    expect(next.faces.p3).toEqual(takeoff.faces.p1);
+    expect(next.joints).toHaveLength(1);
+    expect(transferFaces(takeoff, 'p9', ['p1']).faces.p1).toBeUndefined();
   });
 });
 

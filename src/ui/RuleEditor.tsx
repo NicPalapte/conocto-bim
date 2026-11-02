@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { FactValue } from '../model/properties';
 import {
   AXES,
@@ -32,6 +32,8 @@ interface Props {
   onPicking: (on: boolean) => void;
   onFocus: (element: ElementFacts) => void;
   onRemove: () => void;
+  /** Bedienung für Seiten + Fugen, wenn dieser Messansatz gewählt ist. */
+  sides?: ReactNode;
 }
 
 /** Schlüssel für Kriterium und Ansatz: Maße entlang der Achsen oder Merkmal aus dem Modell. */
@@ -144,6 +146,8 @@ export function RuleEditor(props: Props) {
   };
   const takeoffId = (t: Takeoff) =>
     t.kind === 'length' ? `length:${t.axis}` : t.kind === 'value' ? `value:${t.key}` : t.kind;
+  const sidesTakeoff = (): Takeoff =>
+    rule.takeoff.kind === 'sides' ? rule.takeoff : { kind: 'sides', faces: {}, joints: [] };
   const setTakeoff = (id: string) => {
     const [kind, arg] = id.split(/:(.*)/s);
     const takeoff: Takeoff =
@@ -153,7 +157,9 @@ export function RuleEditor(props: Props) {
           ? { kind: 'value', key: arg }
           : kind === 'count'
             ? { kind: 'count' }
-            : { kind: 'volume' };
+            : kind === 'sides'
+              ? sidesTakeoff()
+              : { kind: 'volume' };
     onChange({ ...rule, takeoff });
   };
 
@@ -282,6 +288,7 @@ export function RuleEditor(props: Props) {
       <label className="rule-field">
         <span className="k">Menge</span>
         <select value={takeoffId(rule.takeoff)} onChange={(e) => setTakeoff(e.target.value)}>
+          <option value="sides">Seiten + Fugen</option>
           <option value="volume">Volumen</option>
           {AXES.map((axis) => (
             <option key={axis} value={`length:${axis}`}>
@@ -298,6 +305,8 @@ export function RuleEditor(props: Props) {
           )}
         </select>
       </label>
+
+      {props.sides}
 
       {result.rows.length > 0 && (
         <div className="rule-rows">
