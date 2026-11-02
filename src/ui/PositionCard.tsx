@@ -42,21 +42,20 @@ export function PositionCard(props: Props) {
   const target = position.quantity;
   const diff = measured && target !== null ? deviation(target, measured.sum) : null;
   return (
-    <aside className="panel panel-right check-card float" aria-label="LV-Position">
+    <aside className="panel panel-right check-card cn-window" aria-label="LV-Position">
+      <div className="pane-head">
+        <span className="title">Position</span>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Position schließen"
+          onClick={onClose}
+        >
+          ✕
+        </button>
+      </div>
       <div className="props-head">
-        <div className="eyebrow-row">
-          <span className="label">
-            {['Position', position.section].filter(Boolean).join(' · ')}
-          </span>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Position schließen"
-            onClick={onClose}
-          >
-            ✕
-          </button>
-        </div>
+        {position.section && <div className="label eyebrow">{position.section}</div>}
         <h2>
           <span className="oz">{position.oz}</span> {position.shortText}
         </h2>

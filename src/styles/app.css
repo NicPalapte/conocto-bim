@@ -1,14 +1,6 @@
-/* Conocto BIM – Layout. Farben, Schrift, Abstände nur über die Tokens aus
-   conocto-tokens.css; keine festen Farbwerte hier. */
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --glass: rgba(28, 28, 30, 0.8);
-    --glass-strong: rgba(28, 28, 30, 0.94);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.35);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.25);
-  }
-}
+/* Conocto BIM – Layout. Farben, Schrift, Abstände nur über die Tokens aus @conocto/design;
+   keine festen Farbwerte hier. Seitenbereiche schweben als Fenster wie in Conocto Doc
+   (cn-window), Kopfzeile wie die Bereiche im Splitscreen; Bedienelemente cn-pill/cn-glass. */
 
 *,
 *::before,
@@ -33,7 +25,7 @@ input {
   color: inherit;
 }
 
-/* Bühne: die 3D-Ansicht füllt das Fenster, alles andere schwebt darüber. */
+/* Bühne: die 3D-Ansicht füllt das Fenster; Seitenbereiche schweben darüber. */
 .stage {
   position: fixed;
   inset: 0;
@@ -45,30 +37,19 @@ input {
   outline: none;
 }
 
-.float {
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--glass);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: var(--shadow);
-}
-
-.surface {
-  background: var(--surface);
-}
-
 .topbar {
   position: fixed;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  top: 0;
+  left: 0;
+  right: 0;
   min-height: var(--h-topbar);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
   z-index: 3;
 }
 
@@ -117,13 +98,13 @@ input {
 
 .btn-primary {
   border: none;
-  background: var(--blueF);
+  background: var(--accent-fill);
   color: #fff;
   font-weight: var(--fw-semi);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--blueFH);
+  background: var(--accent-fill-hover);
 }
 
 .icon-btn {
@@ -142,7 +123,7 @@ input {
 
 .panel {
   position: fixed;
-  top: calc(12px + var(--h-topbar) + 12px);
+  top: calc(var(--h-topbar) + 12px);
   bottom: 12px;
   display: flex;
   flex-direction: column;
@@ -161,8 +142,47 @@ input {
   width: var(--w-props);
 }
 
+/* Kopfzeile eines Bereichs wie in Conocto Doc: 32 px, grau, Linie unten. */
+.pane-head {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  height: 32px;
+  padding: 0 0 0 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.pane-head .title {
+  align-self: center;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: var(--fw-semi);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.pane-head .name {
+  flex: 1;
+  min-width: 0;
+  align-self: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-row);
+  color: var(--dim);
+}
+
+/* Schließen füllt die ganze Kopfzeilenhöhe: größere Tippfläche am Tablet. */
+.pane-head .icon-btn {
+  min-width: 32px;
+  margin-left: auto;
+  border-radius: 0;
+}
+
 .panel-head {
-  padding: 14px 16px 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -186,7 +206,7 @@ input {
 }
 
 .search:focus {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
 
@@ -211,7 +231,7 @@ input {
 }
 
 .model-row input {
-  accent-color: var(--blue);
+  accent-color: var(--accent);
   width: 14px;
   height: 14px;
   margin: 0;
@@ -244,9 +264,9 @@ input {
 }
 
 .tree-row.selected {
-  background: var(--blueS);
-  border-left-color: var(--blue);
-  color: var(--blueD);
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  color: var(--accent-ink);
   font-weight: var(--fw-semi);
 }
 
@@ -298,20 +318,18 @@ input {
 .bar > span {
   display: block;
   height: 100%;
-  background: var(--blue);
+  background: var(--accent);
   transition: width var(--dur-base) var(--ease);
 }
 
 .toolbar {
   position: fixed;
-  top: calc(12px + var(--h-topbar) + 12px);
+  top: calc(var(--h-topbar) + 12px);
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
   gap: 4px;
   padding: 4px;
-  border-radius: var(--r-pill);
-  box-shadow: var(--shadow-sm);
   z-index: 2;
 }
 
@@ -328,8 +346,8 @@ input {
 .toolbar .btn.active,
 .rule-actions .btn.active,
 .check-foot .btn.active {
-  background: var(--blueS);
-  color: var(--blueD);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
 }
 
 .toolbar .divider {
@@ -384,8 +402,8 @@ input {
   margin: -8px 0 0 10px;
   padding: 4px 4px 4px 8px;
   border: 1px solid var(--line);
-  border-radius: var(--r-md, 8px);
-  background: var(--glass-strong, var(--surface));
+  border-radius: var(--r-md);
+  background: var(--glass-strong);
   box-shadow: var(--shadow-sm);
   font-size: var(--fs-label);
   line-height: 1.35;
@@ -424,7 +442,6 @@ input {
   left: 50%;
   transform: translateX(-50%);
   padding: 5px 10px;
-  border-radius: var(--r-pill);
   font-size: var(--fs-label);
   color: var(--mute);
   box-shadow: none;
@@ -436,10 +453,7 @@ input {
   border-bottom: 1px solid var(--line);
 }
 
-.props-head .eyebrow-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.props-head .eyebrow {
   margin-bottom: 5px;
 }
 
@@ -546,16 +560,16 @@ input {
 .drop {
   position: fixed;
   inset: 12px;
-  border: 1px dashed var(--blue);
+  border: 1px dashed var(--accent);
   border-radius: var(--r-lg);
-  background: var(--blueS);
+  background: var(--accent-soft);
   opacity: 0.85;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--display);
   font-size: var(--fs-title-lg);
-  color: var(--blueD);
+  color: var(--accent-ink);
   z-index: 10;
   pointer-events: none;
 }
@@ -624,7 +638,7 @@ input {
   width: 12px;
   height: 12px;
   margin: -6px 0 0 -6px;
-  border: 2px solid var(--blue);
+  border: 2px solid var(--accent);
   background: var(--surface);
   pointer-events: none;
   z-index: 1;
@@ -650,22 +664,6 @@ input {
   border-top: 1px solid var(--line);
 }
 
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-title .name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--fs-row);
-  font-weight: var(--fw-semi);
-}
-
 /* LV-Zeile: OZ · Kurztext · Menge, Auswahl wie im Baum. */
 .lv-row {
   display: flex;
@@ -686,9 +684,9 @@ input {
 }
 
 .lv-row.selected {
-  background: var(--blueS);
-  border-left-color: var(--blue);
-  color: var(--blueD);
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .lv-row .oz {
@@ -715,15 +713,15 @@ input {
   color: var(--mute);
 }
 
-/* Prüfkarte der gewählten Position: so hoch wie ihr Inhalt. */
-.check-card {
-  bottom: auto;
-  max-height: calc(100% - var(--h-topbar) - 48px);
-}
-
 .check-card h2 .oz {
   color: var(--mute);
-  font-weight: var(--fw-regular, 400);
+  font-weight: var(--fw-regular);
+}
+
+/* Positionskarte nur so hoch wie ihr Inhalt: mehr Blick aufs Modell. */
+.check-card {
+  bottom: auto;
+  max-height: calc(100% - var(--h-topbar) - 24px);
 }
 
 .check-grid {
@@ -845,8 +843,8 @@ input {
   gap: 6px;
   padding: 3px 4px 3px 10px;
   border-radius: var(--r-sm);
-  background: var(--blueS);
-  color: var(--blueD);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
 }
 
 .value-chips {
@@ -872,7 +870,7 @@ input {
 }
 
 .range input:focus {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
 
@@ -965,5 +963,5 @@ input {
 .lv-row.ruled .oz::before {
   content: '●';
   margin-right: 4px;
-  color: var(--blue);
+  color: var(--accent);
 }
