@@ -146,8 +146,13 @@ export function RuleEditor(props: Props) {
   };
   const takeoffId = (t: Takeoff) =>
     t.kind === 'length' ? `length:${t.axis}` : t.kind === 'value' ? `value:${t.key}` : t.kind;
-  const sidesTakeoff = (): Takeoff =>
-    rule.takeoff.kind === 'sides' ? rule.takeoff : { kind: 'sides', faces: {}, joints: [] };
+  // Wechsel zwischen „Seiten + Fugen“ und „Fugenband“ behält Seiten und Fugen.
+  const sidesTakeoff = (kind: 'sides' | 'band'): Takeoff => {
+    const t = rule.takeoff;
+    return t.kind === 'sides' || t.kind === 'band'
+      ? { ...t, kind }
+      : { kind, faces: {}, joints: [] };
+  };
   const setTakeoff = (id: string) => {
     const [kind, arg] = id.split(/:(.*)/s);
     const takeoff: Takeoff =
@@ -157,8 +162,8 @@ export function RuleEditor(props: Props) {
           ? { kind: 'value', key: arg }
           : kind === 'count'
             ? { kind: 'count' }
-            : kind === 'sides'
-              ? sidesTakeoff()
+            : kind === 'sides' || kind === 'band'
+              ? sidesTakeoff(kind)
               : { kind: 'volume' };
     onChange({ ...rule, takeoff });
   };
@@ -289,6 +294,7 @@ export function RuleEditor(props: Props) {
         <span className="k">Menge</span>
         <select value={takeoffId(rule.takeoff)} onChange={(e) => setTakeoff(e.target.value)}>
           <option value="sides">Seiten + Fugen</option>
+          <option value="band">Fugenband (Länge)</option>
           <option value="volume">Volumen</option>
           {AXES.map((axis) => (
             <option key={axis} value={`length:${axis}`}>

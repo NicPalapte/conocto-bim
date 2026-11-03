@@ -48,13 +48,15 @@ export type Takeoff =
   | SidesTakeoff;
 
 /**
- * Seiten + Fugen: je Bauteil (GlobalId) die gewählten Seiten als Ausrichtung in
- * Bauteilachsen, dazu eingezeichnete Fugen. Die Menge rechnet der Viewer aus der Geometrie.
+ * Seiten + Fugen (m²) oder Fugenband (m): je Bauteil (GlobalId) die gewählten Seiten als
+ * Ausrichtung in Bauteilachsen, dazu eingezeichnete Fugen. Beim Fugenband ist jede Seite und
+ * jede Fuge ein Band; `trim` = Kürzung je freiem Ende in m. Die Menge rechnet der Viewer.
  */
 export interface SidesTakeoff {
-  kind: 'sides';
+  kind: 'sides' | 'band';
   faces: Record<string, Vec3[]>;
   joints: Joint[];
+  trim?: number;
 }
 
 /** Menge je Bauteil (GlobalId), die der Viewer aus der Geometrie gerechnet hat. */
@@ -126,6 +128,7 @@ export function quantityOf(e: ElementFacts, takeoff: Takeoff, measured?: Measure
     case 'value':
       return numberOf(e.values[takeoff.key]);
     case 'sides':
+    case 'band':
       return measured?.get(e.guid) ?? null;
   }
 }

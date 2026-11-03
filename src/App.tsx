@@ -22,9 +22,11 @@ import {
 } from './model/takeoff';
 import {
   makeJoint,
+  measureBand,
   measureSides,
   sideDirection,
   toggleDirection,
+  type BandMeasure,
   type SidesMeasure,
 } from './model/faces';
 import {
@@ -177,7 +179,7 @@ export function App() {
   // Zuletzt angetipptes Bauteil: Muster für „auf gleiche Bauteile übertragen“.
   const [pattern, setPattern] = useState<string | null>(null);
   const [measuredSides, setMeasuredSides] = useState<Map<string, number>>(new Map());
-  const sidesCache = useRef(new Map<string, SidesMeasure>());
+  const sidesCache = useRef(new Map<string, SidesMeasure | BandMeasure>());
   const rulesInput = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<MeasureMode | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
@@ -677,7 +679,8 @@ export function App() {
       (f) => (ruleCategory !== null && f.category === ruleCategory) || add.has(f.guid),
     );
   }, [facts, rule, ruleCategory]);
-  const sides = rule?.takeoff.kind === 'sides' ? rule.takeoff : null;
+  const sides =
+    rule?.takeoff.kind === 'sides' || rule?.takeoff.kind === 'band' ? rule.takeoff : null;
   const group = rule?.group ?? null;
   const groupMembers = useMemo(
     () => (group ? members(candidates, group) : []),
@@ -705,16 +708,20 @@ export function App() {
         const pick = { modelId: e.modelId, localId: e.localId };
         const dirs = sides.faces[e.guid] ?? [];
         const joints = sides.joints.filter((j) => j.guid === e.guid);
-        const key = `${e.modelId}#${e.localId}|${JSON.stringify([dirs, joints])}`;
+        const how = [sides.kind, sides.kind === 'band' ? (sides.trim ?? 0) : 0];
+        const key = `${e.modelId}#${e.localId}|${JSON.stringify([how, dirs, joints])}`;
         let m = sidesCache.current.get(key);
         if (!m) {
           const { triangles, axes } = await engine.shape(pick);
           if (cancelled) return;
-          m = measureSides(triangles, axes, dirs, joints);
+          m =
+            sides.kind === 'band'
+              ? measureBand(triangles, axes, dirs, joints, sides.trim ?? 0)
+              : measureSides(triangles, axes, dirs, joints);
           if (sidesCache.current.size > 5000) sidesCache.current.clear();
           sidesCache.current.set(key, m);
         }
-        next.set(e.guid, m.sides + m.joints);
+        next.set(e.guid, 'length' in m ? m.length : m.sides + m.joints);
         if (drawn >= MAX_DRAWN) continue;
         drawn += 1;
         if (m.triangles.length) {
@@ -1303,7 +1310,11 @@ export function App() {
                 'Esc beendet',
               ].join(' · ')
             : faceTool
-              ? `${FACE_HINT[faceTool](jointStart !== null)} · Esc beendet`
+              ? `${
+                  faceTool === 'sides' && sides?.kind === 'band'
+                    ? 'Stirnseite antippen: Fugenband dazu oder heraus'
+                    : FACE_HINT[faceTool](jointStart !== null)
+                } · Esc beendet`
               : picking
                 ? 'Bauteil antippen: zur Gruppe dazu oder heraus · Esc beendet'
                 : 'Ziehen dreht · Rad zoomt · Klick wählt · Doppelklick im Baum zoomt'}

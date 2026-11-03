@@ -1044,3 +1044,19 @@ input {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
+
+/* Fugenband: Kürzung je freiem Ende. */
+.rule-field.trim {
+  grid-template-columns: 76px 64px 1fr;
+}
+
+.rule-field.trim input {
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-row);
+  text-align: right;
+}
