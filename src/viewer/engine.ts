@@ -329,6 +329,33 @@ export class BimEngine {
     return picked.reduce((sum, t) => sum + triangleNormal(triangles, t).area, 0);
   }
 
+  /** Dreiecke (Szene) und Achsen eines Bauteils, für Seiten und Fugen. */
+  async shape(pick: Pick): Promise<{ triangles: number[]; axes: ElementAxes }> {
+    const { triangles, axes } = await this.geometry(pick);
+    return { triangles, axes };
+  }
+
+  /** Richtung „oben“ in Szenen-Koordinaten (That Open dreht auf Y oben). */
+  readonly up: Vec3 = [0, 1, 0];
+
+  /** Ausgewählte Dreiecke eines Bauteils in eigener Farbe einzeichnen. */
+  async drawTriangles(id: string, pick: Pick, picked: number[], color: string): Promise<void> {
+    const { triangles } = await this.geometry(pick);
+    this.overlay.addFace(
+      id,
+      picked.flatMap((t) => triangles.slice(t * 9, t * 9 + 9)),
+      color,
+    );
+  }
+
+  drawSegments(id: string, segments: [Vec3, Vec3][], color: string): void {
+    this.overlay.addSegments(id, segments, color);
+  }
+
+  removeDrawings(prefix: string): void {
+    this.overlay.removePrefix(prefix);
+  }
+
   /** Volumen eines Bauteils aus der Geometrie, in m³. */
   async volume(pick: Pick): Promise<number> {
     return this.model(pick.modelId).getItemsVolume([pick.localId]);

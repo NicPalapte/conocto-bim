@@ -53,14 +53,27 @@ export class MeasureOverlay {
     this.add(id, line);
   }
 
-  /** `triangles`: je Dreieck 9 Zahlen in Weltkoordinaten. */
-  addFace(id: string, triangles: ArrayLike<number>): void {
+  /** Einzelne Strecken, z. B. der Rand einer Schnittfläche. */
+  addSegments(id: string, segments: [Vec3, Vec3][], color?: string): void {
+    const geometry = new THREE.BufferGeometry().setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(segments.flat(2), 3),
+    );
+    const material = new THREE.LineBasicMaterial({
+      color: color ? new THREE.Color(color) : this.color,
+      depthTest: false,
+    });
+    this.add(id, new THREE.LineSegments(geometry, material));
+  }
+
+  /** `triangles`: je Dreieck 9 Zahlen in Weltkoordinaten; `color` statt der Messfarbe. */
+  addFace(id: string, triangles: ArrayLike<number>, color?: string): void {
     const geometry = new THREE.BufferGeometry().setAttribute(
       'position',
       new THREE.Float32BufferAttribute(Array.from(triangles), 3),
     );
     const material = new THREE.MeshBasicMaterial({
-      color: this.color,
+      color: color ? new THREE.Color(color) : this.color,
       transparent: true,
       opacity: 0.55,
       side: THREE.DoubleSide,
@@ -78,6 +91,11 @@ export class MeasureOverlay {
       dispose(object);
     }
     this.items.delete(id);
+  }
+
+  /** Alle Zeichnungen, deren Name mit `prefix` beginnt. */
+  removePrefix(prefix: string): void {
+    for (const id of [...this.items.keys()]) if (id.startsWith(prefix)) this.remove(id);
   }
 
   clear(): void {

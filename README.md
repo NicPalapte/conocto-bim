@@ -17,6 +17,9 @@ IFC-Modelle im Browser ansehen – mit Fokus auf Infrastruktur (IFC 4.3: Brücke
 - Mengenregeln je Position: Bauteilgruppe (Klasse, Merkmale, Maße entlang der Bauteilachsen,
   Bereich von–bis von Hand, Bauteile von Hand dazu/heraus) und Menge (Volumen, Länge, Anzahl oder Wert aus dem Modell). Bauteile
   der Gruppe leuchten, Bauteile ohne Wert amber. Regeln als Datei sichern und laden.
+- Menge „Seiten + Fugen“ (z. B. Schalung): Bauteilseiten antippen, Fugen einzeichnen (quer,
+  längs oder durch zwei Punkte). Jede Fuge zählt einmal. Seiten cyan, Fugen violett. Die
+  Seitenwahl lässt sich auf gleiche Bauteile übertragen.
 
 **Modelle und LV verlassen den Rechner nicht.** Alles läuft im Browser, es gibt keinen Server
 und keinen Upload.

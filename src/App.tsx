@@ -12,12 +12,21 @@ import {
   applyRule,
   defaultTakeoff,
   emptyGroup,
+  hasSides,
   members,
   parseLinksFile,
   toLinksFile,
   type ElementFacts,
   type Rule,
+  type SidesTakeoff,
 } from './model/takeoff';
+import {
+  makeJoint,
+  measureSides,
+  sideDirection,
+  toggleDirection,
+  type SidesMeasure,
+} from './model/faces';
 import {
   dedupe,
   formatArea,
@@ -45,6 +54,7 @@ import { TreeLevel } from './ui/ModelTree';
 import { LvList } from './ui/LvList';
 import { PositionCard } from './ui/PositionCard';
 import { RuleEditor } from './ui/RuleEditor';
+import { SidesEditor, type FaceTool } from './ui/SidesEditor';
 import { PropertiesPanel, type GroupInfo } from './ui/PropertiesPanel';
 import { tokenColor } from './viewer/tokens';
 import {
@@ -84,6 +94,17 @@ interface Selection {
 const NO_PLACEMENT: Placement = { facility: null, part: null };
 
 const amberColor = () => tokenColor('--amber');
+const sideColor = () => tokenColor('--cyan');
+const jointColor = () => tokenColor('--violetD');
+// Seiten + Fugen: so viele Bauteile werden eingefärbt; die Summe zählt alle.
+const MAX_DRAWN = 150;
+
+const FACE_HINT: Record<FaceTool, (started: boolean) => string> = {
+  sides: () => 'Bauteilseite antippen: dazu oder heraus',
+  quer: () => 'Bauteil antippen: Fuge quer zur Längsachse',
+  laengs: () => 'Bauteil antippen: Fuge längs zur Längsachse',
+  punkte: (started) => (started ? 'Zweiten Punkt antippen' : 'Ersten Punkt der Fuge antippen'),
+};
 
 const factKey = (modelId: string, localId: number) => `${modelId}#${localId}`;
 
@@ -150,6 +171,13 @@ export function App() {
   const factsRequested = useRef(new Set<string>());
   const [factsLoading, setFactsLoading] = useState(0);
   const [picking, setPicking] = useState(false);
+  const [faceTool, setFaceTool] = useState<FaceTool | null>(null);
+  // Erster Punkt einer Fuge „zwei Punkte“, mit Bauteil.
+  const [jointStart, setJointStart] = useState<{ point: Vec3; guid: string } | null>(null);
+  // Zuletzt angetipptes Bauteil: Muster für „auf gleiche Bauteile übertragen“.
+  const [pattern, setPattern] = useState<string | null>(null);
+  const [measuredSides, setMeasuredSides] = useState<Map<string, number>>(new Map());
+  const sidesCache = useRef(new Map<string, SidesMeasure>());
   const rulesInput = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<MeasureMode | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
@@ -507,7 +535,9 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (picking) setPicking(false);
+      if (jointStart) setJointStart(null);
+      else if (faceTool) setFaceTool(null);
+      else if (picking) setPicking(false);
       else if (pending) {
         engine.removeDrawing('pending');
         engine.drawPreview(null, null);
@@ -517,7 +547,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [engine, mode, pending, picking]);
+  }, [engine, mode, pending, picking, faceTool, jointStart]);
 
   const toggle = useCallback((key: string) => {
     setExpanded((e) => {
@@ -647,7 +677,60 @@ export function App() {
       (f) => (ruleCategory !== null && f.category === ruleCategory) || add.has(f.guid),
     );
   }, [facts, rule, ruleCategory]);
-  const result = useMemo(() => (rule ? applyRule(candidates, rule) : null), [candidates, rule]);
+  const sides = rule?.takeoff.kind === 'sides' ? rule.takeoff : null;
+  const group = rule?.group ?? null;
+  const groupMembers = useMemo(
+    () => (group ? members(candidates, group) : []),
+    [candidates, group],
+  );
+  const result = useMemo(
+    () => (rule ? applyRule(candidates, rule, measuredSides) : null),
+    [candidates, rule, measuredSides],
+  );
+
+  // Seiten + Fugen: Menge je Bauteil aus der Geometrie rechnen und einfärben (Seiten cyan,
+  // Fugen violett). Gleiche Auswahl am gleichen Bauteil wird nicht neu gerechnet.
+  useEffect(() => {
+    engine.removeDrawings('sides:');
+    if (!sides) {
+      setMeasuredSides(new Map());
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const next = new Map<string, number>();
+      let drawn = 0;
+      for (const e of groupMembers) {
+        if (!hasSides(sides, e.guid)) continue;
+        const pick = { modelId: e.modelId, localId: e.localId };
+        const dirs = sides.faces[e.guid] ?? [];
+        const joints = sides.joints.filter((j) => j.guid === e.guid);
+        const key = `${e.modelId}#${e.localId}|${JSON.stringify([dirs, joints])}`;
+        let m = sidesCache.current.get(key);
+        if (!m) {
+          const { triangles, axes } = await engine.shape(pick);
+          if (cancelled) return;
+          m = measureSides(triangles, axes, dirs, joints);
+          if (sidesCache.current.size > 5000) sidesCache.current.clear();
+          sidesCache.current.set(key, m);
+        }
+        next.set(e.guid, m.sides + m.joints);
+        if (drawn >= MAX_DRAWN) continue;
+        drawn += 1;
+        if (m.triangles.length) {
+          await engine.drawTriangles(`sides:${e.guid}`, pick, m.triangles, sideColor());
+          if (cancelled) return;
+        }
+        m.sections.forEach((s, i) =>
+          engine.drawSegments(`sides:${e.guid}:${i}`, s.segments, jointColor()),
+        );
+      }
+      if (!cancelled) setMeasuredSides(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [engine, sides, groupMembers]);
 
   // Hervorhebung: Auswahl, sonst die Bauteile der Mengenregel (ohne Wert amber).
   useEffect(() => {
@@ -662,6 +745,8 @@ export function App() {
     const valued: Record<string, Set<number>> = {};
     const missing: Record<string, Set<number>> = {};
     for (const { element, quantity } of result.rows) {
+      // Bei Seiten + Fugen zeigen die eingefärbten Seiten die Menge; das Bauteil bleibt grau.
+      if (quantity !== null && sides) continue;
       const target = quantity === null ? missing : valued;
       (target[element.modelId] ??= new Set()).add(element.localId);
     }
@@ -669,25 +754,83 @@ export function App() {
       { items: valued, color: accentColor() },
       { items: missing, color: amberColor() },
     ]);
-  }, [engine, selection, result]);
+  }, [engine, selection, result, sides]);
 
   const setRule = useCallback(
     (next: Rule) => setRules((r) => ({ ...r, [next.position]: next })),
     [],
   );
 
+  const factsOf = useCallback(
+    async (hit: Pick): Promise<ElementFacts | null> => {
+      const key = factKey(hit.modelId, hit.localId);
+      const known = facts.get(key);
+      if (known) return known;
+      const [loaded] = await engine.elementFacts(hit.modelId, [hit.localId]);
+      if (!loaded) return null;
+      setFacts((prev) => new Map(prev).set(key, loaded));
+      return loaded;
+    },
+    [engine, facts],
+  );
+
+  // Seiten antippen oder Fuge einzeichnen, nur an Bauteilen der Gruppe.
+  const faceTap = useCallback(
+    async (snap: Snap) => {
+      if (!rule || !sides || !faceTool || !snap.pick) return;
+      const element = await factsOf(snap.pick);
+      if (!element) return;
+      if (!members([element], rule.group).length) {
+        setError('Dieses Bauteil gehört nicht zur Gruppe. Erst „Im Modell dazu / heraus“.');
+        return;
+      }
+      const { guid } = element;
+      const { triangles, axes } = await engine.shape(snap.pick);
+      const update = (next: SidesTakeoff) => setRule({ ...rule, takeoff: next });
+      if (faceTool === 'sides') {
+        const dir = sideDirection(triangles, axes, snap.point);
+        if (!dir) {
+          setError('Hier wurde keine Bauteilseite gefunden.');
+          return;
+        }
+        setPattern(guid);
+        const dirs = toggleDirection(sides.faces[guid] ?? [], dir);
+        const faces = { ...sides.faces, [guid]: dirs };
+        if (!dirs.length) delete faces[guid];
+        update({ ...sides, faces });
+        return;
+      }
+      let points: Vec3[] = [snap.point];
+      if (faceTool === 'punkte') {
+        if (!jointStart || jointStart.guid !== guid) {
+          setJointStart({ point: snap.point, guid });
+          return;
+        }
+        points = [jointStart.point, snap.point];
+        setJointStart(null);
+      }
+      const joint = makeJoint(triangles, axes, faceTool, points, engine.up);
+      if (!joint) {
+        setError('Die beiden Punkte liegen übereinander. Zwei verschiedene Punkte antippen.');
+        return;
+      }
+      update({ ...sides, joints: [...sides.joints, { ...joint, guid }] });
+    },
+    [engine, rule, sides, faceTool, jointStart, factsOf, setRule],
+  );
+
+  // Erster Punkt einer Fuge „zwei Punkte“ als Marke.
+  useEffect(() => {
+    engine.removeDrawing('joint-start');
+    if (jointStart) engine.drawPoints('joint-start', [jointStart.point]);
+  }, [engine, jointStart]);
+
   // Im Modell antippen: Bauteil zur Gruppe dazu oder heraus.
   const togglePick = useCallback(
     async (hit: Pick) => {
       if (!rule) return;
-      const key = factKey(hit.modelId, hit.localId);
-      let element = facts.get(key);
-      if (!element) {
-        const [loaded] = await engine.elementFacts(hit.modelId, [hit.localId]);
-        if (!loaded) return;
-        element = loaded;
-        setFacts((prev) => new Map(prev).set(key, loaded));
-      }
+      const element = await factsOf(hit);
+      if (!element) return;
       const { guid } = element;
       const group = rule.group;
       const isMember = members([element], group).length > 0;
@@ -703,7 +846,7 @@ export function App() {
             : { ...group, add: [...group.add, guid] },
       });
     },
-    [engine, facts, rule, setRule],
+    [factsOf, rule, setRule],
   );
 
   // Klick (ohne Ziehen) in der 3D-Ansicht wählt ein Bauteil oder misst.
@@ -720,6 +863,11 @@ export function App() {
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       down = null;
       if (moved > 4 || models.length === 0) return;
+      if (faceTool) {
+        const snap = await engine.snap(e, null, faceTool === 'sides' || e.altKey);
+        if (snap?.pick) await faceTap(snap);
+        return;
+      }
       if (mode) {
         const snap = snaps(mode)
           ? await engine.snap(e, pending, e.altKey)
@@ -740,7 +888,18 @@ export function App() {
       stage.removeEventListener('pointerdown', onDown);
       stage.removeEventListener('pointerup', onUp);
     };
-  }, [engine, models.length, selectElement, mode, pending, measure, picking, togglePick]);
+  }, [
+    engine,
+    models.length,
+    selectElement,
+    mode,
+    pending,
+    measure,
+    picking,
+    togglePick,
+    faceTool,
+    faceTap,
+  ]);
 
   const measured = useMemo(() => {
     if (result && rule)
@@ -1036,11 +1195,34 @@ export function App() {
                 onChange={setRule}
                 onPicking={(on) => {
                   setPicking(on);
-                  if (on) startMode(null);
+                  if (on) {
+                    startMode(null);
+                    setFaceTool(null);
+                  }
                 }}
+                sides={
+                  sides ? (
+                    <SidesEditor
+                      takeoff={sides}
+                      members={groupMembers}
+                      tool={faceTool}
+                      pattern={pattern}
+                      onTool={(tool) => {
+                        setFaceTool(tool);
+                        setJointStart(null);
+                        if (tool) {
+                          startMode(null);
+                          setPicking(false);
+                        }
+                      }}
+                      onChange={(takeoff) => setRule({ ...rule, takeoff })}
+                    />
+                  ) : undefined
+                }
                 onFocus={(e) => void engine.fit({ [e.modelId]: new Set([e.localId]) })}
                 onRemove={() => {
                   setPicking(false);
+                  setFaceTool(null);
                   setRules(({ [rule.position]: _, ...rest }) => rest);
                 }}
               />
@@ -1060,6 +1242,7 @@ export function App() {
           onMeasure={(dimension) => startMode(MODE_OF[dimension])}
           onClose={() => {
             setPicking(false);
+            setFaceTool(null);
             setPositionId(null);
           }}
         />
@@ -1112,16 +1295,18 @@ export function App() {
       )}
 
       {models.length > 0 && (
-        <div className={`hint cn-pill${mode || picking ? ' measuring' : ''}`}>
+        <div className={`hint cn-pill${mode || picking || faceTool ? ' measuring' : ''}`}>
           {mode
             ? [
                 pending ? 'Endpunkt antippen' : MODES.find((m) => m.mode === mode)?.hint,
                 ...(snaps(mode) ? [hover ? snapLabel(hover) : 'Alt = ohne Einrasten'] : []),
                 'Esc beendet',
               ].join(' · ')
-            : picking
-              ? 'Bauteil antippen: zur Gruppe dazu oder heraus · Esc beendet'
-              : 'Ziehen dreht · Rad zoomt · Klick wählt · Doppelklick im Baum zoomt'}
+            : faceTool
+              ? `${FACE_HINT[faceTool](jointStart !== null)} · Esc beendet`
+              : picking
+                ? 'Bauteil antippen: zur Gruppe dazu oder heraus · Esc beendet'
+                : 'Ziehen dreht · Rad zoomt · Klick wählt · Doppelklick im Baum zoomt'}
         </div>
       )}
 

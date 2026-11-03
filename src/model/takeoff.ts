@@ -1,3 +1,5 @@
+import type { Vec3 } from './bounds';
+import type { Joint } from './faces';
 import type { Dimension } from './lv';
 import type { FactValue } from './properties';
 
@@ -42,7 +44,21 @@ export type Takeoff =
   | { kind: 'volume' }
   | { kind: 'length'; axis: Axis }
   | { kind: 'count' }
-  | { kind: 'value'; key: string };
+  | { kind: 'value'; key: string }
+  | SidesTakeoff;
+
+/**
+ * Seiten + Fugen: je Bauteil (GlobalId) die gewählten Seiten als Ausrichtung in
+ * Bauteilachsen, dazu eingezeichnete Fugen. Die Menge rechnet der Viewer aus der Geometrie.
+ */
+export interface SidesTakeoff {
+  kind: 'sides';
+  faces: Record<string, Vec3[]>;
+  joints: Joint[];
+}
+
+/** Menge je Bauteil (GlobalId), die der Viewer aus der Geometrie gerechnet hat. */
+export type Measured = ReadonlyMap<string, number>;
 
 export interface Rule {
   /** Fingerabdruck der Position (`conocto-pos-v1`). */
@@ -58,6 +74,7 @@ export function emptyGroup(category: string | null = null): Group {
 /** Messansatz, der zur Einheit der Position passt. */
 export function defaultTakeoff(dimension: Dimension | null, unit: string | null): Takeoff {
   if (dimension === 'volume') return { kind: 'volume' };
+  if (dimension === 'area') return { kind: 'sides', faces: {}, joints: [] };
   if (dimension === 'length') return { kind: 'length', axis: 'z' };
   if (/^(st|stk|stck|stück)\.?$/i.test((unit ?? '').trim())) return { kind: 'count' };
   return { kind: 'volume' };
@@ -98,7 +115,7 @@ export function members(elements: ElementFacts[], group: Group): ElementFacts[] 
 }
 
 /** Menge eines Bauteils nach dem Messansatz; `null` = an diesem Bauteil nicht messbar. */
-export function quantityOf(e: ElementFacts, takeoff: Takeoff): number | null {
+export function quantityOf(e: ElementFacts, takeoff: Takeoff, measured?: Measured): number | null {
   switch (takeoff.kind) {
     case 'volume':
       return e.volume;
@@ -108,7 +125,29 @@ export function quantityOf(e: ElementFacts, takeoff: Takeoff): number | null {
       return 1;
     case 'value':
       return numberOf(e.values[takeoff.key]);
+    case 'sides':
+      return measured?.get(e.guid) ?? null;
   }
+}
+
+/** Ob an einem Bauteil Seiten gewählt oder Fugen eingezeichnet sind. */
+export function hasSides(takeoff: SidesTakeoff, guid: string): boolean {
+  return (takeoff.faces[guid]?.length ?? 0) > 0 || takeoff.joints.some((j) => j.guid === guid);
+}
+
+/** Seiten eines Musterbauteils auf andere Bauteile übertragen (Fugen bleiben je Bauteil). */
+export function transferFaces(
+  takeoff: SidesTakeoff,
+  pattern: string,
+  targets: string[],
+): SidesTakeoff {
+  const dirs = takeoff.faces[pattern] ?? [];
+  const faces = { ...takeoff.faces };
+  for (const guid of targets) {
+    if (dirs.length) faces[guid] = dirs.map((d) => [...d] as Vec3);
+    else delete faces[guid];
+  }
+  return { ...takeoff, faces };
 }
 
 export interface TakeoffResult {
@@ -118,10 +157,14 @@ export interface TakeoffResult {
   missing: number;
 }
 
-export function applyRule(elements: ElementFacts[], rule: Pick<Rule, 'group' | 'takeoff'>) {
+export function applyRule(
+  elements: ElementFacts[],
+  rule: Pick<Rule, 'group' | 'takeoff'>,
+  measured?: Measured,
+) {
   const rows = members(elements, rule.group).map((element) => ({
     element,
-    quantity: quantityOf(element, rule.takeoff),
+    quantity: quantityOf(element, rule.takeoff, measured),
   }));
   rows.sort((a, b) => (b.quantity ?? -1) - (a.quantity ?? -1));
   const result: TakeoffResult = {
