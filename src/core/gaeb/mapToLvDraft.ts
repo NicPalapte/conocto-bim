@@ -46,6 +46,7 @@ function mapSection(section: ParsedSection): SectionDraft {
   return {
     number: section.number,
     label: section.label,
+    ...(section.text === null ? {} : { text: section.text }),
     positions: section.positions.map(mapPosition),
     sections: section.sections.map(mapSection),
   };
@@ -55,6 +56,7 @@ function mapLot(lot: ParsedLot): LotDraft {
   return {
     number: lot.number,
     label: lot.label,
+    ...(lot.text === null ? {} : { text: lot.text }),
     sections: lot.sections.map(mapSection),
   };
 }

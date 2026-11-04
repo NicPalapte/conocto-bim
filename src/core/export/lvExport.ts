@@ -13,6 +13,7 @@ export type LvExportPosition = Omit<PositionDraft, 'attributes'> & { hashes: Pos
 export interface LvExportSection {
   number: string;
   label: string | null;
+  text?: string;
   positions: LvExportPosition[];
   sections: LvExportSection[];
 }
@@ -20,6 +21,7 @@ export interface LvExportSection {
 export interface LvExportLot {
   number: string;
   label: string | null;
+  text?: string;
   sections: LvExportSection[];
 }
 
@@ -58,6 +60,7 @@ export function toLvExport(draft: LVDraft, fileId: string): LvExport {
   const section = (s: SectionDraft): LvExportSection => ({
     number: s.number,
     label: s.label,
+    ...(s.text === undefined ? {} : { text: s.text }),
     positions: s.positions.map(position),
     sections: s.sections.map(section),
   });
@@ -70,6 +73,7 @@ export function toLvExport(draft: LVDraft, fileId: string): LvExport {
     lots: draft.lots.map((lot) => ({
       number: lot.number,
       label: lot.label,
+      ...(lot.text === undefined ? {} : { text: lot.text }),
       sections: lot.sections.map(section),
     })),
   };

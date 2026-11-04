@@ -3,7 +3,13 @@
 // (<GAEB>, <Award>, <BoQ>, <BoQCtgy>, …) verlassen dieses Modul nie.
 
 import { GAEBParseError, GAEBValidationError, GAEBVersionError } from './errors';
-import { extractInlineText, extractMarkedText, splitInputFields, type TextRange } from './text';
+import {
+  extractInlineText,
+  extractMarkedText,
+  splitInputFields,
+  splitLabel,
+  type TextRange,
+} from './text';
 import type { GaebItemType, ParsedLV, ParsedLot, ParsedPosition, ParsedSection } from './types';
 import { childrenByLocal, decimalByLocal, firstByLocal, pathByLocal, textByLocal } from './xml';
 
@@ -229,7 +235,7 @@ function parseCategory(ctgy: Element, parentPath: string[]): ParsedSection {
 
   return {
     number: joinOz(path),
-    label: extractInlineText(firstByLocal(ctgy, 'LblTx')) || null,
+    ...splitLabel(firstByLocal(ctgy, 'LblTx')),
     positions: content.positions,
     sections: content.sections,
   };
@@ -245,6 +251,7 @@ function asSections(content: BodyContent, path: string[]): ParsedSection[] {
   const wrapper: ParsedSection = {
     number: joinOz(path),
     label: null,
+    text: null,
     positions: content.positions,
     sections: [],
   };
@@ -267,7 +274,7 @@ function parseLots(body: Element, info: Element | null, fallbackLabel: string | 
         lotBody === null ? { sections: [], positions: [] } : collectBody(lotBody, [number]);
       return {
         number,
-        label: extractInlineText(firstByLocal(ctgy, 'LblTx')) || null,
+        ...splitLabel(firstByLocal(ctgy, 'LblTx')),
         sections: asSections(content, [number]),
       };
     });
@@ -275,7 +282,14 @@ function parseLots(body: Element, info: Element | null, fallbackLabel: string | 
 
   // Ohne Los-Ebene fasst ein implizites Los ohne Nummer das ganze LV zusammen,
   // damit die Hierarchie Los → Abschnitt → Position erhalten bleibt.
-  return [{ number: '', label: fallbackLabel, sections: asSections(collectBody(body, []), []) }];
+  return [
+    {
+      number: '',
+      label: fallbackLabel,
+      text: null,
+      sections: asSections(collectBody(body, []), []),
+    },
+  ];
 }
 
 /** Auftraggeber aus <OWN><Address> — GAEB verteilt den Namen auf Name1…Name4. */
