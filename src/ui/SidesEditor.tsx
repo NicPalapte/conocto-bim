@@ -31,11 +31,16 @@ function toNumber(text: string): number | null {
   return text.trim() && Number.isFinite(n) ? n : null;
 }
 
-/** Seiten antippen, Fugen einzeichnen (quer, längs, zwei Punkte), Seiten übertragen. */
+/**
+ * Seiten antippen, Fugen einzeichnen (quer, längs, zwei Punkte), Seiten übertragen. Beim
+ * Fugenband zusätzlich die Kürzung je freiem Ende.
+ */
 export function SidesEditor(props: Props) {
   const { takeoff, members, tool, pattern, onTool, onChange } = props;
   const [how, setHow] = useState<JointHow>('quer');
   const [editing, setEditing] = useState<{ index: number; text: string } | null>(null);
+  const [trimText, setTrimText] = useState<string | null>(null);
+  const band = takeoff.kind === 'band';
   const byGuid = new Map(members.map((e) => [e.guid, e]));
   const withSides = members.filter((e) => (takeoff.faces[e.guid]?.length ?? 0) > 0).length;
   const patternFaces = pattern ? (takeoff.faces[pattern]?.length ?? 0) : 0;
@@ -65,7 +70,7 @@ export function SidesEditor(props: Props) {
           aria-pressed={tool === 'sides'}
           onClick={() => toggleTool('sides')}
         >
-          {tool === 'sides' ? 'Fertig' : 'Seiten antippen'}
+          {tool === 'sides' ? 'Fertig' : band ? 'Stirnseiten antippen' : 'Seiten antippen'}
         </button>
         <span className="sub">
           an {withSides} von {members.length} Bauteilen
@@ -119,6 +124,27 @@ export function SidesEditor(props: Props) {
           {takeoff.joints.length === 1 ? '1 Fuge' : `${takeoff.joints.length} Fugen`}
         </span>
       </div>
+
+      {band && (
+        <label className="rule-field trim">
+          <span className="k">Kürzung</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            aria-label="Kürzung je freiem Ende in m"
+            value={trimText ?? number.format(takeoff.trim ?? 0)}
+            onFocus={() => setTrimText(number.format(takeoff.trim ?? 0))}
+            onChange={(e) => setTrimText(e.target.value)}
+            onBlur={(e) => {
+              setTrimText(null);
+              const trim = toNumber(e.target.value);
+              if (trim !== null && trim >= 0) onChange({ ...takeoff, trim });
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          />
+          <span className="sub">m je Ende</span>
+        </label>
+      )}
 
       {takeoff.joints.length > 0 && (
         <ul className="joints">

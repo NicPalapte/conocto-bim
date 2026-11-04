@@ -213,3 +213,154 @@ export function measureSides(
   });
   return { sides, joints: sections.reduce((n, s) => n + s.area, 0), triangles, sections };
 }
+
+// Fugenband: Länge der Mittellinie einer Fugenfläche (Schnitt oder Stirnseite).
+
+type Segment = [Vec3, Vec3];
+
+/** Ein Band: Länge in m; `closed` = geschlossene Schleife (Fläche mit Loch). */
+export interface Band {
+  length: number;
+  closed: boolean;
+}
+
+// Ecken der Randstrecken werden auf 1 mm verbunden; Schnittpunkte benachbarter Dreiecke
+// weichen nur im Rundungsrauschen voneinander ab.
+const LOOP_GRID = 1e3;
+
+function loopKey(v: Vec3): string {
+  return v.map((x) => Math.round(x * LOOP_GRID)).join(',');
+}
+
+/** Randstrecken zu Ringen gruppiert (über gemeinsame Ecken). */
+function loopsOf(segments: Segment[]): Segment[][] {
+  const parent = new Map<string, string>();
+  const find = (k: string): string => {
+    let r = k;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    parent.set(k, r);
+    return r;
+  };
+  for (const [p, q] of segments) {
+    const a = loopKey(p);
+    const b = loopKey(q);
+    if (!parent.has(a)) parent.set(a, a);
+    if (!parent.has(b)) parent.set(b, b);
+    parent.set(find(a), find(b));
+  }
+  const loops = new Map<string, Segment[]>();
+  for (const s of segments) {
+    const root = find(loopKey(s[0]));
+    loops.set(root, [...(loops.get(root) ?? []), s]);
+  }
+  return [...loops.values()];
+}
+
+/** Punkt in einem Ring? Strahl in der Ebene (u, v) zählt Schnitte mit den Randstrecken. */
+function inside(p: Vec3, loop: Segment[], u: Vec3, v: Vec3): boolean {
+  const x = dot(p, u);
+  const y = dot(p, v);
+  let hits = 0;
+  for (const [a, b] of loop) {
+    const [ax, ay, bx, by] = [dot(a, u), dot(a, v), dot(b, u), dot(b, v)];
+    if (ay > y === by > y) continue;
+    if (x < ax + ((y - ay) * (bx - ax)) / (by - ay)) hits += 1;
+  }
+  return hits % 2 === 1;
+}
+
+/**
+ * Länge der Mittellinie eines Streifens aus Fläche A und halbem Umfang h: für ein Rechteck
+ * L × d gilt h = L + d und A = L · d, also L = (h + √(h² − 4A)) / 2. Beim Ring ist die
+ * Mittellinie der halbe Umfang aus Außen- und Innenrand.
+ */
+export function stripLength(area: number, perimeter: number, closed: boolean): number {
+  const half = perimeter / 2;
+  if (closed) return half;
+  return (half + Math.sqrt(Math.max(0, half * half - 4 * area))) / 2;
+}
+
+/**
+ * Bänder aus gerichteten Randstrecken einer ebenen Fläche (Außenrand und Löcher gegenläufig).
+ * Jeder Außenrand ist ein Band; liegt ein Loch darin, ist es eine geschlossene Schleife.
+ * `trim` wird bei offenen Bändern an beiden Enden abgezogen.
+ */
+export function bandsOf(segments: Segment[], normal: Vec3, trim = 0): Band[] {
+  const n = unit(normal);
+  const rings = loopsOf(segments).map((loop) => ({
+    loop,
+    area: loop.reduce((s, [p, q]) => s + dot(cross(p, q), n), 0) / 2,
+    length: loop.reduce((s, [p, q]) => s + Math.hypot(...sub(q, p)), 0),
+  }));
+  if (rings.reduce((s, r) => s + r.area, 0) < 0) for (const r of rings) r.area = -r.area;
+  const outer = rings.filter((r) => r.area > 1e-9).sort((a, b) => a.area - b.area);
+  const parts = outer.map((r) => ({ area: r.area, length: r.length, closed: false }));
+  const u = unit(cross(n, Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]));
+  const v = cross(n, u);
+  for (const hole of rings.filter((r) => r.area < -1e-9)) {
+    const k = outer.findIndex((r) => inside(hole.loop[0][0], r.loop, u, v));
+    if (k < 0) continue;
+    parts[k].area += hole.area;
+    parts[k].length += hole.length;
+    parts[k].closed = true;
+  }
+  return parts.map((p) => {
+    const length = stripLength(p.area, p.length, p.closed);
+    return { closed: p.closed, length: p.closed ? length : Math.max(0, length - 2 * trim) };
+  });
+}
+
+/** Gerichtete Randkanten einer Dreiecksmenge (Kanten, die nur ein Dreieck der Menge hat). */
+function boundaryOf(t: Triangles, triangles: number[]): Segment[] {
+  const edges = new Map<string, Segment>();
+  for (const i of triangles) {
+    for (let c = 0; c < 3; c++) {
+      const p = vertex(t, i * 3 + c);
+      const q = vertex(t, i * 3 + ((c + 1) % 3));
+      const back = `${loopKey(q)}|${loopKey(p)}`;
+      if (edges.has(back)) edges.delete(back);
+      else edges.set(`${loopKey(p)}|${loopKey(q)}`, [p, q]);
+    }
+  }
+  return [...edges.values()];
+}
+
+export interface BandMeasure {
+  /** Summe aller Bänder in m. */
+  length: number;
+  bands: Band[];
+  triangles: number[];
+  sections: { segments: Segment[] }[];
+}
+
+/**
+ * Fugenband eines Bauteils: je gewählter Stirnseite und je eingezeichneter Fuge ein Band
+ * entlang der Mittellinie der Fugenfläche.
+ */
+export function measureBand(
+  t: Triangles,
+  axes: Axes,
+  dirs: Vec3[],
+  joints: Pick<Joint, 'normal' | 'from'>[],
+  trim = 0,
+): BandMeasure {
+  const bands: Band[] = [];
+  const triangles: number[] = [];
+  for (const dir of dirs) {
+    const face = sideTriangles(t, axes, [dir]);
+    triangles.push(...face);
+    bands.push(...bandsOf(boundaryOf(t, face), toWorld(dir, axes), trim));
+  }
+  const sections = joints.map((j) => {
+    const plane = jointPlane(t, axes, j);
+    const s = section(t, plane.origin, plane.normal);
+    bands.push(...bandsOf(s.segments, plane.normal, trim));
+    return { segments: s.segments };
+  });
+  return {
+    length: bands.reduce((s, b) => s + b.length, 0),
+    bands,
+    triangles: [...new Set(triangles)].sort((a, b) => a - b),
+    sections,
+  };
+}

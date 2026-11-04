@@ -115,6 +115,15 @@ describe('Seiten + Fugen', () => {
     expect(next.joints).toHaveLength(1);
     expect(transferFaces(takeoff, 'p9', ['p1']).faces.p1).toBeUndefined();
   });
+  it('Fugenband nimmt die gerechnete Länge genauso', () => {
+    const band: SidesTakeoff = { ...takeoff, kind: 'band', trim: 0.1 };
+    const result = applyRule(
+      elements,
+      { group: emptyGroup('IFCPILE'), takeoff: band },
+      new Map([['p1', 11.8]]),
+    );
+    expect(result.sum).toBeCloseTo(11.8);
+  });
 });
 
 describe('Regeldatei', () => {
