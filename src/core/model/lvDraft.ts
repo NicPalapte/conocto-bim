@@ -30,6 +30,8 @@ export interface PositionDraft {
 export interface SectionDraft {
   number: string;
   label: string | null;
+  /** Weitere Absätze aus der Bezeichnung, die nicht zum Namen gehören; fehlt ohne solche. */
+  text?: string;
   positions: PositionDraft[];
   sections: SectionDraft[];
 }
@@ -37,6 +39,8 @@ export interface SectionDraft {
 export interface LotDraft {
   number: string;
   label: string | null;
+  /** Weitere Absätze aus der Bezeichnung, die nicht zum Namen gehören; fehlt ohne solche. */
+  text?: string;
   sections: SectionDraft[];
 }
 

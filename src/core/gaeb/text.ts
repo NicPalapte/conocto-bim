@@ -236,3 +236,29 @@ export function extractText(el: Element | null): string {
 export function extractInlineText(el: Element | null): string {
   return extractText(el).replace(/\s+/g, ' ').trim();
 }
+
+/** Bezeichnung eines LV-Bereichs, aufgeteilt in Name und weiteren Text. */
+export interface SplitLabel {
+  label: string | null;
+  text: string | null;
+}
+
+/**
+ * Bezeichnung eines LV-Bereichs (<LblTx>). Das Schema erlaubt dort mehrere
+ * Absätze; manche Programme schreiben so Beschreibungstext in die Überschrift
+ * (Issue #196). Name ist der erste Absatz, der Rest bleibt als Text erhalten.
+ * Getrennt wird nur an echten Absätzen nach `reflowLines` — umbrochene Zeilen
+ * einer langen Überschrift bleiben zusammen.
+ */
+export function splitLabel(el: Element | null): SplitLabel {
+  const lines = extractText(el).split('\n').map(collapseSpaces);
+  const first = lines.findIndex((line) => line !== '');
+  if (first === -1) return { label: null, text: null };
+  // Bewusste Leerzeilen im Rest bleiben stehen, Rand ohne Leerzeilen.
+  const text = lines
+    .slice(first + 1)
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { label: lines[first], text: text === '' ? null : text };
+}

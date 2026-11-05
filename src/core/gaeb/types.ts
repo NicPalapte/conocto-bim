@@ -39,6 +39,8 @@ export interface ParsedSection {
   /** Vollständige Bereichsnummer (Pfad), z. B. "001.002". */
   number: string;
   label: string | null;
+  /** Weitere Absätze aus der Bezeichnung, die nicht zum Namen gehören (Issue #196). */
+  text: string | null;
   positions: ParsedPosition[];
   sections: ParsedSection[];
 }
@@ -47,6 +49,8 @@ export interface ParsedLot {
   /** Losnummer; leer, wenn die Datei keine Los-Ebene hat. */
   number: string;
   label: string | null;
+  /** Weitere Absätze aus der Bezeichnung, die nicht zum Namen gehören (Issue #196). */
+  text: string | null;
   sections: ParsedSection[];
 }
 
