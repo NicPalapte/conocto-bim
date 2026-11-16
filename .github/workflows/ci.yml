@@ -13,7 +13,7 @@ jobs:
           # Ganze Historie: die Prüfung unten vergleicht den PR mit main.
           fetch-depth: 0
       # Meldet, was nach dem Merge Konflikte erzeugt (Nummer, Tabellenzeile, Version von Hand).
-      # Siehe docs/decisions/neu-nummern-beim-merge.md.
+      # Siehe docs/decisions/0005-nummern-beim-merge.md.
       - name: Entscheidungen, Version, Changelog
         if: github.event_name == 'pull_request'
         run: |

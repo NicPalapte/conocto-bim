@@ -10,6 +10,8 @@ Eine Datei je Weichenstellung. Im Gesamtprodukt Conocto heißen diese Entscheidu
 | 0001 | [Look aus @conocto/design, Bereiche als Fenster](0001-designpaket.md)         | akzeptiert | 2026-11-02 |
 | 0002 | [Fingerabdruck heißt conocto-pos-v1](0002-kennungen-conocto.md)               | akzeptiert | 2026-11-02 |
 | 0003 | [Fugenband als Länge auf der Mittellinie der Fuge](0003-fugenband.md)         | akzeptiert | 2026-11-03 |
+| 0004 | [Mengen aus gewählten Seiten und eingezeichneten Fugen](0004-seiten-und-fugen.md) | akzeptiert | 2026-11-02 |
+| 0005 | [Nummer, Version und Changelog erst nach dem Merge](0005-nummern-beim-merge.md) | akzeptiert | 2026-11-16 |
 
 ## Regeln
 

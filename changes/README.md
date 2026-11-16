@@ -14,4 +14,4 @@ Fugenband messen
 - `art: funktion` → mittlere Zahl der Version steigt, `art: korrektur` → letzte Zahl.
 - Nicht von Hand ändern: Version in `package.json`/`package-lock.json` und `CHANGELOG.md`.
 - Nach dem Merge macht der Bot daraus Version und Changelog und löscht die Datei
-  (Entscheidung neu-nummern-beim-merge).
+  (Entscheidung 0005).

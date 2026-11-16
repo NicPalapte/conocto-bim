@@ -7,7 +7,7 @@ name: Nummer und Version
 #   - die neue Version in package.json und den Abschnitt in CHANGELOG.md
 #     aus den Bausteinen in changes/.
 # Im PR gibt es damit nichts mehr, was zwei PRs gleichzeitig beanspruchen.
-# Siehe docs/decisions/neu-nummern-beim-merge.md.
+# Siehe docs/decisions/0005-nummern-beim-merge.md.
 #
 # Schreiben auf main: über den Bot-Schlüssel (Secret BOT_SCHLUESSEL), der im Ruleset als
 # Ausnahme eingetragen ist. Einrichtung: docs/setup/bot-schluessel.md.

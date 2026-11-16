@@ -1,4 +1,4 @@
-# NEU – Mengen aus gewählten Seiten und eingezeichneten Fugen
+# BIM-0004 – Mengen aus gewählten Seiten und eingezeichneten Fugen
 
 - Status: akzeptiert
 - Datum: 2026-11-02

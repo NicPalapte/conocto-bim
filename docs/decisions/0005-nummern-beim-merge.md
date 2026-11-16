@@ -1,4 +1,4 @@
-# NEU – Nummer, Version und Changelog erst nach dem Merge
+# BIM-0005 – Nummer, Version und Changelog erst nach dem Merge
 
 - Status: akzeptiert
 - Datum: 2026-11-16
@@ -15,7 +15,7 @@
 - Gleiches Werkzeug `.github/conocto/entscheidungen.py` in allen vier Repos; ausführliche
   Begründung in Conocto Doc (gleichnamige Entscheidung).
 - Die doppelte 0002 „Seiten und Fugen“ bekommt dabei eine neue Nummer
-  (neu-seiten-und-fugen).
+  (0004).
 - Neue Übersichtstabelle in `docs/decisions/README.md`. Status heißt jetzt wie in den anderen
   Repos „akzeptiert“ statt „angenommen“.
 
