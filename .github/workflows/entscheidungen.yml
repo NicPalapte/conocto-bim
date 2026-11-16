@@ -1,0 +1,59 @@
+name: Nummer und Version
+
+# Was macht dieser Workflow?
+# Nach jedem Merge auf main vergibt er in EINEM Commit:
+#   - die nächste Nummer für neue Entscheidungen (docs/decisions/neu-*.md → NNNN-*.md)
+#     samt Zeile in der Übersichtstabelle,
+#   - die neue Version in package.json und den Abschnitt in CHANGELOG.md
+#     aus den Bausteinen in changes/.
+# Im PR gibt es damit nichts mehr, was zwei PRs gleichzeitig beanspruchen.
+# Siehe docs/decisions/neu-nummern-beim-merge.md.
+#
+# Schreiben auf main: über den Bot-Schlüssel (Secret BOT_SCHLUESSEL), der im Ruleset als
+# Ausnahme eingetragen ist. Einrichtung: docs/setup/bot-schluessel.md.
+# Fehlt der Schlüssel, scheitert nur dieser Lauf; der Viewer selbst ist nicht betroffen.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Nie zwei Läufe gleichzeitig, sonst bekämen zwei Entscheidungen dieselbe Nummer.
+concurrency:
+  group: nummer-und-version
+  cancel-in-progress: false
+
+jobs:
+  vergeben:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          ssh-key: ${{ secrets.BOT_SCHLUESSEL }}
+
+      - name: Nummer, Tabelle, Version, Changelog
+        id: v
+        run: >
+          python3 .github/conocto/entscheidungen.py vergeben --praefix BIM
+          --versionsdatei package.json --lockdatei package-lock.json
+
+      - name: Commit auf main
+        if: steps.v.outputs.entscheidungen != '' || steps.v.outputs.version != ''
+        env:
+          ENTSCHEIDUNGEN: ${{ steps.v.outputs.entscheidungen }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          git config user.name "conocto-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          titel="chore: Nummer und Version vergeben"
+          [ -n "$VERSION" ] && titel="$titel – $VERSION"
+          [ -n "$ENTSCHEIDUNGEN" ] && titel="$titel – $ENTSCHEIDUNGEN"
+          git commit -q -m "$titel"
+          git pull -q --rebase origin main
+          git push origin HEAD:main

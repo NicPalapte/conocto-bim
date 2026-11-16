@@ -9,6 +9,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Ganze Historie: die Prüfung unten vergleicht den PR mit main.
+          fetch-depth: 0
+      # Meldet, was nach dem Merge Konflikte erzeugt (Nummer, Tabellenzeile, Version von Hand).
+      # Siehe docs/decisions/neu-nummern-beim-merge.md.
+      - name: Entscheidungen, Version, Changelog
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 -m unittest discover -s .github/conocto -q
+          python3 .github/conocto/entscheidungen.py pruefen --praefix BIM \
+            --versionsdatei package.json --lockdatei package-lock.json \
+            --basis "origin/${{ github.base_ref }}"
       - uses: actions/setup-node@v4
         with:
           node-version: 22

@@ -1,6 +1,6 @@
 # 0003 – Fugenband als Länge auf der Mittellinie der Fuge
 
-- Status: angenommen
+- Status: akzeptiert
 - Datum: 2026-11-03
 - Mockup: https://claude.ai/artifact/MXbDU8kfQvDAxzS15n6TUj (Artboards Fugenband und Tunnel,
   von Nico freigegeben)

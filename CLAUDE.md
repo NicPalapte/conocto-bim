@@ -33,3 +33,9 @@
 - Texte für den Owner (README, PR, Commits): Deutsch, einfache Sprache, Ergebnis zuerst.
 - Commits: Conventional Commits, `feat|fix|refactor|test|chore|docs(<scope>): …`,
   Scopes `viewer · tree · props · ui · lv · ci`.
+- Entscheidungen nur als `docs/decisions/neu-<titel>.md` mit `# NEU – Titel`. Verboten: Nummer
+  selbst vergeben, Zeile in `docs/decisions/README.md` ergänzen, Version in `package.json` oder
+  `CHANGELOG.md` von Hand ändern. Stattdessen Baustein `changes/<titel>.md`; Nummer, Zeile,
+  Version macht `.github/workflows/entscheidungen.yml` nach dem Merge. Nach außen heißen sie
+  `BIM-NNNN`, Verweise in andere Repos mit Präfix (`DOC-0091`, `CORE-0005`, `DS-0001`).
+  `.github/conocto/entscheidungen.py` ist in allen vier Repos gleich, nur gemeinsam ändern.

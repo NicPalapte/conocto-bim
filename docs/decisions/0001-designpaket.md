@@ -1,6 +1,6 @@
 # 0001 – Look aus dem Paket @conocto/design, Bereiche als Fenster wie in Conocto Doc
 
-- Status: angenommen
+- Status: akzeptiert
 - Datum: 2026-11-02
 - Issue: #18
 
