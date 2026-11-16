@@ -91,6 +91,20 @@ class Repo(unittest.TestCase):
         )
         self.assertLess(readme.index("0002"), readme.index("## Regeln"))
 
+    def test_workflows_bleiben_unberuehrt(self) -> None:
+        Path(".github/workflows").mkdir(parents=True)
+        wf = Path(".github/workflows/ci.yml")
+        wf.write_text("# siehe neu-zweite-sache\n")
+        self.commit("alt")
+        basis = sh("git", "rev-parse", "HEAD").strip()
+        Path("docs/decisions/neu-zweite-sache.md").write_text(NEU)
+        wf.write_text("# siehe neu-zweite-sache.md\n")
+        self.commit("pr")
+        fehler, _ = ent.pruefen(self.e, basis)
+        self.assertTrue(any("ci.yml" in f for f in fehler))
+        ent.vergeben(self.e)
+        self.assertEqual(wf.read_text(), "# siehe neu-zweite-sache.md\n")
+
     def test_zwei_neue_bekommen_zwei_nummern(self) -> None:
         Path("docs/decisions/neu-a.md").write_text(NEU)
         self.commit("a")

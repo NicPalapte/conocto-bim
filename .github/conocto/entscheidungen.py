@@ -208,11 +208,17 @@ def neu_dateien(ordner: Path) -> list[Path]:
     return sorted((p for p in ordner.glob("neu-*.md") if NEU_DATEI.match(p.name)), key=zeit)
 
 
+WORKFLOWS = ".github/workflows/"
+
+
 def text_dateien() -> list[Path]:
     out: list[Path] = []
     for name in git("ls-files", "-z").split("\0"):
         p = Path(name)
-        if not name or not p.is_file() or p.stat().st_size > 2_000_000:
+        # Workflows darf der Standard-Token von GitHub nicht ändern (Rechte `workflows`).
+        if not name or name.startswith(WORKFLOWS) or not p.is_file():
+            continue
+        if p.stat().st_size > 2_000_000:
             continue
         try:
             p.read_text(encoding="utf-8")
@@ -348,6 +354,18 @@ def pruefen(e: Einstellung, basis: str) -> tuple[list[str], list[str]]:
                 )
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", felder.get("Datum", "")):
                 fehler.append(f"{pfad}: Datum fehlt (Form JJJJ-MM-TT)")
+
+    slugs = [m[1] for p in e.ordner.glob("neu-*.md") if (m := NEU_DATEI.match(p.name))]
+    for pfad in geaendert:
+        if not pfad.startswith(WORKFLOWS) or not Path(pfad).is_file():
+            continue
+        text = Path(pfad).read_text(encoding="utf-8")
+        for slug in slugs:
+            if re.search(rf"(?<![\w/.-])neu-{re.escape(slug)}(?![\w-])", text):
+                fehler.append(
+                    f"{pfad}: verweist auf neu-{slug}. Workflows ändert der Bot nicht; "
+                    "bitte die Entscheidung dort beim Titel nennen oder nach dem Merge verlinken."
+                )
 
     readme = e.ordner / "README.md"
     if readme.as_posix() in geaendert and readme.exists():
