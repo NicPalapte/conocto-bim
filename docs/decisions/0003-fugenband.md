@@ -1,10 +1,10 @@
 # 0003 – Fugenband als Länge auf der Mittellinie der Fuge
 
-- Status: angenommen
+- Status: akzeptiert
 - Datum: 2026-11-03
 - Mockup: https://claude.ai/artifact/MXbDU8kfQvDAxzS15n6TUj (Artboards Fugenband und Tunnel,
   von Nico freigegeben)
-- Baut auf 0002 (Seiten + Fugen) auf.
+- Baut auf neu-seiten-und-fugen (Seiten + Fugen) auf.
 
 ## Ergebnis
 - Neuer Messansatz **Fugenband (Länge)**, bedient wie „Seiten + Fugen“.
@@ -26,7 +26,7 @@
 - Bei stark ungleich dicken Querschnitten (Voute, Konsole) ist die Mittellinie eine
   Näherung. Dann besser eine Fuge mit gleichmäßiger Dicke wählen.
 - Berühren sich zwei Blöcke und an beiden ist die Stirnseite gewählt, zählt das Band
-  doppelt. Wie bei 0002 an einem Bauteil herausnehmen.
+  doppelt. Wie bei neu-seiten-und-fugen an einem Bauteil herausnehmen.
 - „Quer“ ist rechtwinklig zur längsten Ausdehnung. Ist ein Ring kürzer als sein
   Durchmesser, Stirnseite antippen oder 2 Punkte nehmen.
 

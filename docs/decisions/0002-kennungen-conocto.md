@@ -1,11 +1,11 @@
 # 0002 – Fingerabdruck heißt conocto-pos-v1
 
-- Status: angenommen
+- Status: akzeptiert
 - Datum: 2026-11-02
 
 ## Ergebnis
 - Der LV-Kern in `src/core/` ist neu aus Conocto Doc kopiert. Dort heißen alle Kennungen
-  jetzt `conocto-…` statt `bubble-…` (bubbleLV Entscheidung 0091).
+  jetzt `conocto-…` statt `bubble-…` (DOC-0091).
 - Der Fingerabdruck der Positionen heißt `conocto-pos-v1`. Alle Fingerabdrücke haben sich
   einmal geändert; `tests/core.test.ts` hält die neuen Werte fest.
 - Kein Lesen alter Stände: es gibt keine Daten, die erhalten bleiben müssen (Owner).
