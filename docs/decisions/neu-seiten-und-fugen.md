@@ -1,7 +1,8 @@
-# 0002 – Mengen aus gewählten Seiten und eingezeichneten Fugen
+# NEU – Mengen aus gewählten Seiten und eingezeichneten Fugen
 
 - Status: angenommen
 - Datum: 2026-11-02
+- Früher: 0002 (Nummer war doppelt vergeben, neu nummeriert am 2026-11-16)
 - Mockup: https://claude.ai/artifact/MXbDU8kfQvDAxzS15n6TUj (von Nico freigegeben)
 
 ## Ergebnis
